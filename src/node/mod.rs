@@ -30,6 +30,10 @@ impl<C: Command, E: Executor<C>> Node<C, E> {
             logger: logger,
         }
     }
+
+    pub fn heartbeat(&self) {
+        self.log_debug(format!("Heartbeat"));
+    }
 }
 
 #[async_trait]

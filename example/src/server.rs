@@ -2,6 +2,7 @@
 extern crate slog;
 extern crate slog_term;
 
+use std::sync::Arc;
 use slog::Drain;
 use straft::node::Node;
 
@@ -26,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_logger = root_logger.new(o!("node" => format!("{id}")));
 
     let node = Node::new(id, executor, server_logger);
-    let app = App {node: node, addr: addr};
+    let app = App {node: Arc::new(node), addr: addr};
     app.run().await?;
 
     Ok(())
