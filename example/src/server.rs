@@ -7,6 +7,7 @@ use straft::node::Node;
 
 mod app;
 mod grpc;
+mod types;
 
 use app::App;
 

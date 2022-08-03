@@ -1,16 +1,15 @@
 use std::collections::HashMap;
 
 use crate::node::role::Role;
-use crate::Entry;
-use crate::NodeId;
+use crate::{Command, Entry, NodeId};
 
-pub struct NodeState {
+pub struct NodeState<C: Command> {
     // role
     role: Role,
     // persistent
     current_term: u64,
     voted_for: Option<NodeId>,
-    log: Vec<Entry>,
+    log: Vec<Entry<C>>,
     // volatile
     commit_index: u64,
     last_applied: u64,
@@ -20,7 +19,7 @@ pub struct NodeState {
     leader_id: Option<NodeId>,
 }
 
-impl NodeState {
+impl<C: Command> NodeState<C> {
     pub fn new() -> Self {
         NodeState {
             role: Role::FOLLOWER,

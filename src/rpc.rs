@@ -3,19 +3,19 @@ use crate::{Command, NodeId};
 use anyhow::Result;
 
 #[async_trait]
-pub trait RPC {
-    async fn append_entries(&self, request: AppendEntriesRequest) -> Result<AppendEntriesResponse>;
+pub trait RPC<C: Command> {
+    async fn append_entries(&self, request: AppendEntriesRequest<C>) -> Result<AppendEntriesResponse>;
     async fn request_vote(&self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
-    async fn append_log(&self, request: AppendLogRequest) -> Result<AppendLogResponse>;
+    async fn append_log(&self, request: AppendLogRequest<C>) -> Result<AppendLogResponse>;
 }
 
 #[derive(Debug)]
-pub struct AppendEntriesRequest {
+pub struct AppendEntriesRequest<C: Command> {
     pub term: u64,
     pub leader_id: NodeId,
     pub prev_log_index: u64,
     pub prev_log_term: u64,
-    pub entries: Vec<Entry>,
+    pub entries: Vec<Entry<C>>,
     pub leader_commit: u64,
 }
 
@@ -40,8 +40,8 @@ pub struct RequestVoteResponse {
 }
 
 #[derive(Debug)]
-pub struct AppendLogRequest {
-    pub command: Command,
+pub struct AppendLogRequest<C: Command> {
+    pub command: C,
 }
 
 #[derive(Debug)]
