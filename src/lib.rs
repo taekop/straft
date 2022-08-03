@@ -17,3 +17,6 @@ pub struct Entry<C: Command> {
     pub term: u64,
     pub command: C,
 }
+
+pub use node::executor::Executor;
+pub use node::logger;

@@ -1,4 +1,8 @@
 #[derive(Debug)]
-pub struct Command(pub String);
+pub struct MyCommand(pub String);
 
-impl straft::Command for Command {}
+impl straft::Command for MyCommand {}
+
+pub struct MyExecutor {}
+
+impl straft::Executor<MyCommand> for MyExecutor {}

@@ -1,17 +1,12 @@
 extern crate slog;
 
-use slog::Drain;
-
+use crate::node::executor::Executor;
 use crate::node::Node;
 use crate::Command;
 
 pub type Logger = slog::Logger;
 
-pub fn default() -> Logger {
-    slog::Logger::root(slog_stdlog::StdLog.fuse(), o!())
-}
-
-impl<C: Command> Node<C> {
+impl<C: Command, E: Executor<C>> Node<C, E> {
     pub fn log_debug(&self, msg: &str) {
         debug!(self.logger, "{}", msg);
     }

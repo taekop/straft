@@ -1,10 +1,9 @@
-extern crate slog_stdlog;
-
 use anyhow::Result;
 use logger::Logger;
 use state::NodeState;
 
-mod logger;
+pub mod executor;
+pub mod logger;
 mod role;
 mod state;
 
@@ -13,26 +12,32 @@ use crate::rpc::{
     RequestVoteRequest, RequestVoteResponse, RPC,
 };
 use crate::{Command, NodeId};
+use executor::Executor;
 
-pub struct Node<C: Command> {
+pub struct Node<C: Command, E: Executor<C>> {
     id: NodeId,
     state: NodeState<C>,
+    executor: E,
     logger: Logger,
 }
 
-impl<C: Command> Node<C> {
-    pub fn new<L: Into<Option<Logger>>>(id: NodeId, logger: L) -> Self {
+impl<C: Command, E: Executor<C>> Node<C, E> {
+    pub fn new(id: NodeId, executor: E, logger: Logger) -> Self {
         Node {
             id: id,
             state: NodeState::new(),
-            logger: logger.into().unwrap_or(logger::default()),
+            executor: executor,
+            logger: logger,
         }
     }
 }
 
 #[async_trait]
-impl<C: Command> RPC<C> for Node<C> {
-    async fn append_entries(&self, request: AppendEntriesRequest<C>) -> Result<AppendEntriesResponse> {
+impl<C: Command, E: Executor<C>> RPC<C> for Node<C, E> {
+    async fn append_entries(
+        &self,
+        request: AppendEntriesRequest<C>,
+    ) -> Result<AppendEntriesResponse> {
         self.log_debug(&format!("gRPC Request: AppendEntries {:?}", request));
         Ok(AppendEntriesResponse {
             term: 0,

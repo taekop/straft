@@ -2,10 +2,10 @@ use straft::node::Node;
 use straft::rpc::RPC;
 use tonic::{transport::Server, Request, Response, Status};
 use crate::grpc::{raft_server::{Raft, RaftServer}, AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse, AppendLogRequest, AppendLogResponse};
-use crate::types::Command;
+use crate::types::{MyCommand, MyExecutor};
 
 pub struct App {
-    pub node: Node<Command>,
+    pub node: Node<MyCommand, MyExecutor>,
     pub addr: std::net::SocketAddr,
 }
 

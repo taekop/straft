@@ -1,19 +1,19 @@
-use crate::types::Command;
+use crate::types::MyCommand;
 
 tonic::include_proto!("raft");
 
-impl Into<straft::Entry<Command>> for Entry {
-    fn into(self) -> straft::Entry<Command> {
+impl Into<straft::Entry<MyCommand>> for Entry {
+    fn into(self) -> straft::Entry<MyCommand> {
         straft::Entry {
             index: self.index.unwrap(),
             term: self.term.unwrap(),
-            command: Command(self.command.unwrap()),
+            command: MyCommand(self.command.unwrap()),
         }
     }
 }
 
-impl From<straft::Entry<Command>> for Entry {
-    fn from(entry: straft::Entry<Command>) -> Entry {
+impl From<straft::Entry<MyCommand>> for Entry {
+    fn from(entry: straft::Entry<MyCommand>) -> Entry {
         Entry {
             index: Some(entry.index),
             term: Some(entry.term),
@@ -22,8 +22,8 @@ impl From<straft::Entry<Command>> for Entry {
     }
 }
 
-impl Into<straft::rpc::AppendEntriesRequest<Command>> for AppendEntriesRequest {
-    fn into(self) -> straft::rpc::AppendEntriesRequest<Command> {
+impl Into<straft::rpc::AppendEntriesRequest<MyCommand>> for AppendEntriesRequest {
+    fn into(self) -> straft::rpc::AppendEntriesRequest<MyCommand> {
         straft::rpc::AppendEntriesRequest {
             term: self.term.unwrap(),
             leader_id: self.leader_id.unwrap(),
@@ -35,8 +35,8 @@ impl Into<straft::rpc::AppendEntriesRequest<Command>> for AppendEntriesRequest {
     }
 }
 
-impl From<straft::rpc::AppendEntriesRequest<Command>> for AppendEntriesRequest {
-    fn from(req: straft::rpc::AppendEntriesRequest<Command>) -> AppendEntriesRequest {
+impl From<straft::rpc::AppendEntriesRequest<MyCommand>> for AppendEntriesRequest {
+    fn from(req: straft::rpc::AppendEntriesRequest<MyCommand>) -> AppendEntriesRequest {
         AppendEntriesRequest {
             term: Some(req.term),
             leader_id: Some(req.leader_id),
@@ -106,16 +106,16 @@ impl From<straft::rpc::RequestVoteResponse> for RequestVoteResponse {
     }
 }
 
-impl Into<straft::rpc::AppendLogRequest<Command>> for AppendLogRequest {
-    fn into(self) -> straft::rpc::AppendLogRequest<Command> {
+impl Into<straft::rpc::AppendLogRequest<MyCommand>> for AppendLogRequest {
+    fn into(self) -> straft::rpc::AppendLogRequest<MyCommand> {
         straft::rpc::AppendLogRequest {
-            command: Command(self.command.unwrap()),
+            command: MyCommand(self.command.unwrap()),
         }
     }
 }
 
-impl From<straft::rpc::AppendLogRequest<Command>> for AppendLogRequest {
-    fn from(req: straft::rpc::AppendLogRequest<Command>) -> AppendLogRequest {
+impl From<straft::rpc::AppendLogRequest<MyCommand>> for AppendLogRequest {
+    fn from(req: straft::rpc::AppendLogRequest<MyCommand>) -> AppendLogRequest {
         AppendLogRequest {
             command: Some(req.command.0),
         }
