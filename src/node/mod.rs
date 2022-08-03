@@ -38,7 +38,7 @@ impl<C: Command, E: Executor<C>> RPC<C> for Node<C, E> {
         &self,
         request: AppendEntriesRequest<C>,
     ) -> Result<AppendEntriesResponse> {
-        self.log_debug(&format!("gRPC Request: AppendEntries {:?}", request));
+        self.log_debug(format!("gRPC Request: AppendEntries {:?}", request));
         Ok(AppendEntriesResponse {
             term: 0,
             success: false,
@@ -46,7 +46,7 @@ impl<C: Command, E: Executor<C>> RPC<C> for Node<C, E> {
     }
 
     async fn request_vote(&self, request: RequestVoteRequest) -> Result<RequestVoteResponse> {
-        self.log_debug(&format!("gRPC Request: RequestVote {:?}", request));
+        self.log_debug(format!("gRPC Request: RequestVote {:?}", request));
         Ok(RequestVoteResponse {
             term: 0,
             vote_granted: false,
@@ -54,7 +54,7 @@ impl<C: Command, E: Executor<C>> RPC<C> for Node<C, E> {
     }
 
     async fn append_log(&self, request: AppendLogRequest<C>) -> Result<AppendLogResponse> {
-        self.log_debug(&format!("gRPC Request: AppendLog {:?}", request));
+        self.log_debug(format!("gRPC Request: AppendLog {:?}", request));
         Ok(AppendLogResponse {
             success: false,
             leader_id: None,

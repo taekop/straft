@@ -12,7 +12,7 @@ pub struct App {
 impl App {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         let addr = self.addr.clone();
-        self.node.log_info("Running...");
+        self.node.log_info(String::from("Running..."));
 
         Server::builder()
             .add_service(RaftServer::new(self))
