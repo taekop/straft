@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::NodeId;
 use crate::node::role::Role;
-use crate::node::entry::Entry;
+use crate::Entry;
+use crate::NodeId;
 
 pub struct NodeState {
     // role

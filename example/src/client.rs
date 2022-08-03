@@ -7,12 +7,12 @@ async fn append_entries(
     client: &mut RaftClient<Channel>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request = tonic::Request::new(AppendEntriesRequest {
-        term: None,
-        leader_id: None,
-        prev_log_index: None,
-        prev_log_term: None,
+        term: Some(0),
+        leader_id: Some(String::from("")),
+        prev_log_index: Some(0),
+        prev_log_term: Some(0),
         entries: Vec::new(),
-        leader_commit: None,
+        leader_commit: Some(0),
     });
 
     let response = client.append_entries(request).await?;
@@ -24,10 +24,10 @@ async fn append_entries(
 
 async fn request_vote(client: &mut RaftClient<Channel>) -> Result<(), Box<dyn std::error::Error>> {
     let request = tonic::Request::new(RequestVoteRequest {
-        term: None,
-        candidate_id: None,
-        last_log_index: None,
-        last_log_term: None,
+        term: Some(0),
+        candidate_id: Some(String::from("")),
+        last_log_index: Some(0),
+        last_log_term: Some(0),
     });
 
     let response = client.request_vote(request).await?;
@@ -38,7 +38,7 @@ async fn request_vote(client: &mut RaftClient<Channel>) -> Result<(), Box<dyn st
 }
 
 async fn append_log(client: &mut RaftClient<Channel>) -> Result<(), Box<dyn std::error::Error>> {
-    let request = tonic::Request::new(AppendLogRequest { command: None });
+    let request = tonic::Request::new(AppendLogRequest { command: Some(String::from("")) });
 
     let response = client.append_log(request).await?;
 

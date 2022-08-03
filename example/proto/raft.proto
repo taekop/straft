@@ -3,34 +3,34 @@ syntax = "proto3";
 package raft;
 
 message Entry {
-  optional int32 index = 1;
-  optional int32 term = 2;
+  optional uint64 index = 1;
+  optional uint64 term = 2;
   optional string command = 3;
 }
 
 message AppendEntriesRequest {
-    optional int32 term = 1;
+    optional uint64 term = 1;
     optional string leader_id = 2;
-    optional int32 prev_log_index = 3;
-    optional int32 prev_log_term = 4;
+    optional uint64 prev_log_index = 3;
+    optional uint64 prev_log_term = 4;
     repeated Entry entries = 5;
-    optional int32 leader_commit = 6;
+    optional uint64 leader_commit = 6;
 }
 
 message AppendEntriesResponse {
-  optional int32 term = 1;
+  optional uint64 term = 1;
   optional bool success = 2;
 }
 
 message RequestVoteRequest {
-    optional int32 term = 1;
+    optional uint64 term = 1;
     optional string candidate_id = 2;
-    optional int32 last_log_index = 3;
-    optional int32 last_log_term = 4;
+    optional uint64 last_log_index = 3;
+    optional uint64 last_log_term = 4;
 }
 
 message RequestVoteResponse {
-    optional int32 term = 1;
+    optional uint64 term = 1;
     optional bool vote_granted = 2;
 }
 
