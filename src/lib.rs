@@ -5,8 +5,8 @@ extern crate async_trait;
 
 use std::fmt::Debug;
 
-pub mod rpc;
 pub mod node;
+pub mod rpc;
 
 pub type NodeId = String;
 pub trait Command: Send + Sync + Debug {}
@@ -18,5 +18,8 @@ pub struct Entry<C: Command> {
     pub command: C,
 }
 
-pub use node::executor::Executor;
-pub use node::logger;
+pub use node::{
+    executor::Executor,
+    logger::{self, Logger},
+    Node,
+};
