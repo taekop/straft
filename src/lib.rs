@@ -4,12 +4,19 @@ extern crate slog;
 extern crate async_trait;
 
 use std::fmt::Debug;
+use std::ops::Range;
 
 pub mod node;
 pub mod rpc;
 
 pub type NodeId = String;
 pub trait Command: Send + Sync + Debug {}
+
+pub struct NodeConfig {
+    pub id: NodeId,
+    pub election_timeout: Range<u128>,
+    pub heartbeat_period: u64,
+}
 
 #[derive(Debug)]
 pub struct Entry<C: Command> {

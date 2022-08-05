@@ -1,6 +1,7 @@
 use anyhow::Result;
 use logger::Logger;
 use state::NodeState;
+use tokio::time::{interval, Duration};
 
 mod election_timer;
 pub mod executor;
@@ -12,12 +13,13 @@ use crate::rpc::{
     AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
     RequestVoteRequest, RequestVoteResponse, RPC,
 };
-use crate::{Command, NodeId};
+use crate::{Command, NodeConfig, NodeId};
 use election_timer::ElectionTimer;
 use executor::Executor;
+use role::Role;
 
 pub struct Node<C: Command, E: Executor<C>> {
-    id: NodeId,
+    config: NodeConfig,
     state: NodeState<C>,
     election_timer: ElectionTimer,
     executor: E,
@@ -25,18 +27,44 @@ pub struct Node<C: Command, E: Executor<C>> {
 }
 
 impl<C: Command, E: Executor<C>> Node<C, E> {
-    pub fn new(id: NodeId, executor: E, logger: Logger) -> Self {
+    pub fn new(config: NodeConfig, executor: E, logger: Logger) -> Self {
+        let election_timeout = config.election_timeout.clone();
         Node {
-            id: id,
+            config: config,
             state: NodeState::new(),
-            election_timer: ElectionTimer::new(1000..2000),
+            election_timer: ElectionTimer::new(election_timeout),
             executor: executor,
             logger: logger,
         }
     }
 
+    pub async fn start_heartbeat(&self) {
+        self.log_info(format!("Start Heartbeat"));
+        self.election_timer.reset();
+        let mut interval = interval(Duration::from_millis(self.config.heartbeat_period));
+        loop {
+            interval.tick().await;
+            self.heartbeat();
+        }
+    }
+
     pub fn heartbeat(&self) {
         self.log_debug(format!("Heartbeat"));
+        if ((self.state.is_follower() || self.state.is_follower())
+            && self.election_timer.is_election_timeout())
+        {
+            self.change_role(Role::CANDIDATE);
+        } else if (self.state.is_leader()) {
+            self.request_append_entries();
+        }
+    }
+
+    fn change_role(&self, role: Role) {
+        self.log_debug(format!("Change role to {:?}", role));
+    }
+
+    fn request_append_entries(&self) {
+        self.log_debug(format!("Request AppendEntries to other nodes"));
     }
 }
 
@@ -47,6 +75,7 @@ impl<C: Command, E: Executor<C>> RPC<C> for Node<C, E> {
         request: AppendEntriesRequest<C>,
     ) -> Result<AppendEntriesResponse> {
         self.log_debug(format!("gRPC Request: AppendEntries {:?}", request));
+        self.election_timer.reset();
         Ok(AppendEntriesResponse {
             term: 0,
             success: false,

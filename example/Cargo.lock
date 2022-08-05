@@ -813,6 +813,7 @@ dependencies = [
  "async-trait",
  "rand",
  "slog",
+ "tokio",
 ]
 
 [[package]]

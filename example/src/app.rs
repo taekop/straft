@@ -2,10 +2,14 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use tonic::{transport::Server, Request, Response, Status};
 
+use crate::grpc::{
+    raft_server::{Raft, RaftServer},
+    AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
+    RequestVoteRequest, RequestVoteResponse,
+};
+use crate::types::{MyCommand, MyExecutor};
 use straft::node::Node;
 use straft::rpc::RPC;
-use crate::grpc::{raft_server::{Raft, RaftServer}, AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse, AppendLogRequest, AppendLogResponse};
-use crate::types::{MyCommand, MyExecutor};
 
 pub struct App {
     pub node: Arc<Node<MyCommand, MyExecutor>>,
@@ -20,10 +24,7 @@ impl App {
         let heartbeat = tokio::spawn({
             let node = Arc::clone(&self.node);
             async move {
-                loop {
-                    node.heartbeat();
-                    sleep(Duration::from_millis(1000)).await;
-                }
+                node.start_heartbeat().await;
             }
         });
 

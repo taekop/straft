@@ -33,4 +33,25 @@ impl<C: Command> NodeState<C> {
             leader_id: None,
         }
     }
+
+    pub fn is_follower(&self) -> bool {
+        match &self.role {
+            Role::FOLLOWER => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_candidate(&self) -> bool {
+        match &self.role {
+            Role::CANDIDATE => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_leader(&self) -> bool {
+        match &self.role {
+            Role::LEADER => true,
+            _ => false,
+        }
+    }
 }
