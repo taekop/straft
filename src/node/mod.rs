@@ -2,6 +2,7 @@ use anyhow::Result;
 use logger::Logger;
 use state::NodeState;
 
+mod election_timer;
 pub mod executor;
 pub mod logger;
 mod role;
@@ -12,11 +13,13 @@ use crate::rpc::{
     RequestVoteRequest, RequestVoteResponse, RPC,
 };
 use crate::{Command, NodeId};
+use election_timer::ElectionTimer;
 use executor::Executor;
 
 pub struct Node<C: Command, E: Executor<C>> {
     id: NodeId,
     state: NodeState<C>,
+    election_timer: ElectionTimer,
     executor: E,
     logger: Logger,
 }
@@ -26,6 +29,7 @@ impl<C: Command, E: Executor<C>> Node<C, E> {
         Node {
             id: id,
             state: NodeState::new(),
+            election_timer: ElectionTimer::new(1000..2000),
             executor: executor,
             logger: logger,
         }
