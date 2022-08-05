@@ -6,17 +6,16 @@ use tokio::time::{interval, Duration};
 mod election_timer;
 pub mod executor;
 pub mod logger;
-mod role;
 mod state;
 
 use crate::rpc::{
     AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
     RequestVoteRequest, RequestVoteResponse, RPC,
 };
-use crate::{Command, NodeConfig, NodeId};
+use crate::{Command, NodeConfig};
 use election_timer::ElectionTimer;
 use executor::Executor;
-use role::Role;
+use state::Role;
 
 pub struct Node<C: Command, E: Executor<C>> {
     config: NodeConfig,
@@ -50,17 +49,32 @@ impl<C: Command, E: Executor<C>> Node<C, E> {
 
     pub fn heartbeat(&self) {
         self.log_debug(format!("Heartbeat"));
-        if ((self.state.is_follower() || self.state.is_follower())
+        if ((self.state.is_role(Role::FOLLOWER) || self.state.is_role(Role::CANDIDATE))
             && self.election_timer.is_election_timeout())
         {
             self.change_role(Role::CANDIDATE);
-        } else if (self.state.is_leader()) {
+        } else if (self.state.is_role(Role::LEADER)) {
             self.request_append_entries();
         }
     }
 
     fn change_role(&self, role: Role) {
         self.log_debug(format!("Change role to {:?}", role));
+        self.state.change_role(role);
+        match role {
+            Role::FOLLOWER => (),
+            Role::CANDIDATE => {
+                self.run_for_leader();
+            },
+            Role::LEADER => {
+                self.state.initialize_leader_state(self.config.id.clone());
+                self.request_append_entries();
+            }
+        }
+    }
+
+    fn run_for_leader(&self) {
+        self.log_debug(format!("Run for leader in term {:?}", self.state.current_term));
     }
 
     fn request_append_entries(&self) {
