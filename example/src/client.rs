@@ -38,7 +38,9 @@ async fn request_vote(client: &mut RaftClient<Channel>) -> Result<(), Box<dyn st
 }
 
 async fn append_log(client: &mut RaftClient<Channel>) -> Result<(), Box<dyn std::error::Error>> {
-    let request = tonic::Request::new(AppendLogRequest { command: Some(String::from("")) });
+    let request = tonic::Request::new(AppendLogRequest {
+        command: Some(String::from("")),
+    });
 
     let response = client.append_log(request).await?;
 

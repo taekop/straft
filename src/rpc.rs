@@ -4,7 +4,10 @@ use anyhow::Result;
 
 #[async_trait]
 pub trait RPC<C: Command> {
-    async fn append_entries(&self, request: AppendEntriesRequest<C>) -> Result<AppendEntriesResponse>;
+    async fn append_entries(
+        &self,
+        request: AppendEntriesRequest<C>,
+    ) -> Result<AppendEntriesResponse>;
     async fn request_vote(&self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
     async fn append_log(&self, request: AppendLogRequest<C>) -> Result<AppendLogResponse>;
 }
@@ -25,7 +28,7 @@ pub struct AppendEntriesResponse {
     pub success: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RequestVoteRequest {
     pub term: u64,
     pub candidate_id: NodeId,

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::grpc::{
@@ -7,12 +6,12 @@ use crate::grpc::{
     AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
     RequestVoteRequest, RequestVoteResponse,
 };
-use crate::types::{MyCommand, MyExecutor};
+use crate::types::{MyClient, MyCommand, MyExecutor};
 use straft::node::Node;
 use straft::rpc::RPC;
 
 pub struct App {
-    pub node: Arc<Node<MyCommand, MyExecutor>>,
+    pub node: Arc<Node<MyCommand, MyExecutor, MyClient>>,
     pub addr: std::net::SocketAddr,
 }
 
@@ -24,7 +23,7 @@ impl App {
         let heartbeat = tokio::spawn({
             let node = Arc::clone(&self.node);
             async move {
-                node.start_heartbeat().await;
+                node.start_heartbeat();
             }
         });
 
