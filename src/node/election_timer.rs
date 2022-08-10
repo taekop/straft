@@ -1,45 +1,38 @@
 use rand::{thread_rng, Rng};
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // time values as millis, u64
 pub struct ElectionTimer {
     election_timeout: Range<u64>,
-    heartbeat_time: Arc<Mutex<u64>>,
-    next_election_timeout: Arc<Mutex<u64>>,
+    heartbeat_time: u64,
+    next_election_timeout: u64,
 }
 
 impl ElectionTimer {
     pub fn new(election_timeout: Range<u64>) -> ElectionTimer {
         ElectionTimer {
-            heartbeat_time: Arc::new(Mutex::new(0)),
+            heartbeat_time: 0,
             election_timeout: election_timeout,
-            next_election_timeout: Arc::new(Mutex::new(0)),
+            next_election_timeout: 0,
         }
     }
 
-    pub fn reset(&self) {
-        let mut heartbeat_time = self.heartbeat_time.lock().unwrap();
-        let mut next_election_timeout = self.next_election_timeout.lock().unwrap();
+    pub fn reset(&mut self) {
         let now = ElectionTimer::now();
-        *heartbeat_time = now;
-        *next_election_timeout = thread_rng().gen_range(self.election_timeout.clone());
+        self.heartbeat_time = now;
+        self.next_election_timeout = thread_rng().gen_range(self.election_timeout.clone());
     }
 
-    pub fn is_election_timeout(&self) -> bool {
-        let heartbeat_time = self.heartbeat_time.lock().unwrap();
-        let next_election_timeout = self.next_election_timeout.lock().unwrap();
+    pub fn is_timeout(&self) -> bool {
         let now = ElectionTimer::now();
-        now > *heartbeat_time + *next_election_timeout
+        now > self.heartbeat_time + self.next_election_timeout
     }
 
     // half timeout to prevent leader switching due to delayed response
-    pub fn until_next_timeout(&self) -> u64 {
-        let heartbeat_time = self.heartbeat_time.lock().unwrap();
-        let next_election_timeout = self.next_election_timeout.lock().unwrap();
+    pub fn _until_next_election(&self) -> u64 {
         let now = ElectionTimer::now();
-        (*heartbeat_time + *next_election_timeout / 2)
+        (self.heartbeat_time + self.next_election_timeout / 2)
             .checked_sub(now)
             .unwrap_or(0)
     }

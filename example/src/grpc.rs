@@ -5,7 +5,7 @@ tonic::include_proto!("raft");
 impl Into<straft::Entry<MyCommand>> for Entry {
     fn into(self) -> straft::Entry<MyCommand> {
         straft::Entry {
-            index: self.index.unwrap(),
+            index: self.index.unwrap() as usize,
             term: self.term.unwrap(),
             command: MyCommand(self.command.unwrap()),
         }
@@ -15,7 +15,7 @@ impl Into<straft::Entry<MyCommand>> for Entry {
 impl From<straft::Entry<MyCommand>> for Entry {
     fn from(entry: straft::Entry<MyCommand>) -> Entry {
         Entry {
-            index: Some(entry.index),
+            index: Some(entry.index as u64),
             term: Some(entry.term),
             command: Some(entry.command.0),
         }
@@ -27,10 +27,10 @@ impl Into<straft::rpc::AppendEntriesRequest<MyCommand>> for AppendEntriesRequest
         straft::rpc::AppendEntriesRequest {
             term: self.term.unwrap(),
             leader_id: self.leader_id.unwrap(),
-            prev_log_index: self.prev_log_index.unwrap(),
+            prev_log_index: self.prev_log_index.unwrap() as usize,
             prev_log_term: self.prev_log_term.unwrap(),
             entries: self.entries.into_iter().map(|x| x.into()).collect(),
-            leader_commit: self.leader_commit.unwrap(),
+            leader_commit: self.leader_commit.unwrap() as usize,
         }
     }
 }
@@ -40,10 +40,10 @@ impl From<straft::rpc::AppendEntriesRequest<MyCommand>> for AppendEntriesRequest
         AppendEntriesRequest {
             term: Some(req.term),
             leader_id: Some(req.leader_id),
-            prev_log_index: Some(req.prev_log_index),
+            prev_log_index: Some(req.prev_log_index as u64),
             prev_log_term: Some(req.prev_log_term),
             entries: req.entries.into_iter().map(|x| Entry::from(x)).collect(),
-            leader_commit: Some(req.leader_commit),
+            leader_commit: Some(req.leader_commit as u64),
         }
     }
 }
@@ -71,7 +71,7 @@ impl Into<straft::rpc::RequestVoteRequest> for RequestVoteRequest {
         straft::rpc::RequestVoteRequest {
             term: self.term.unwrap(),
             candidate_id: self.candidate_id.unwrap(),
-            last_log_index: self.last_log_index.unwrap(),
+            last_log_index: self.last_log_index.unwrap() as usize,
             last_log_term: self.last_log_term.unwrap(),
         }
     }
@@ -82,7 +82,7 @@ impl From<straft::rpc::RequestVoteRequest> for RequestVoteRequest {
         RequestVoteRequest {
             term: Some(req.term),
             candidate_id: Some(req.candidate_id),
-            last_log_index: Some(req.last_log_index),
+            last_log_index: Some(req.last_log_index as u64),
             last_log_term: Some(req.last_log_term),
         }
     }

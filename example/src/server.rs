@@ -1,25 +1,58 @@
 #[macro_use]
-extern crate async_trait;
-#[macro_use]
 extern crate slog;
 extern crate slog_term;
 
 use slog::Drain;
-use std::collections::HashMap;
+use std::io;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::collections::HashMap;
 use straft::{Logger, Node, NodeConfig};
-use tokio::sync::Mutex;
 
 mod app;
 mod grpc;
 mod types;
 
 use app::App;
-use grpc::raft_client::RaftClient;
-use types::{MyClient, MyCommand, MyExecutor};
+use types::{MyClient, MyCommand, MyStateMachine, MyStateMachineClient};
 
-fn logger(id: &str, level: slog::Level) -> Logger {
+fn get_input() -> usize {
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n: usize = input.trim().parse().unwrap();
+    n
+}
+
+fn get_config(num: usize) -> (String, String, NodeConfig<MyCommand, MyClient>) {
+    let ids = vec![String::from("alpha"), String::from("beta"), String::from("gamma")];
+    let addrs = vec![String::from("[::1]:50050"), String::from("[::1]:50051"), String::from("[::1]:50052")];
+    let addresses: HashMap<String, String> = ids.iter().cloned().zip(addrs.iter().cloned()).collect();
+    let mut client: HashMap<String, MyClient> = ids.iter().cloned().zip(addrs.iter().cloned()).map(|(id, addr)| {
+        (id, MyClient::new(addr))
+    }).collect();
+
+    let id = ids[num].clone();
+    let addr = addrs[num].clone();
+    client.remove(&id.clone());
+    let config = NodeConfig {
+        id: id.clone(),
+        addresses: addresses,
+        client: client,
+        election_timeout: 1000..2000,
+        heartbeat_period: 200,
+        majority: 2,
+        _phantom_c: PhantomData,
+    };
+    (id, addr, config)
+}
+
+fn get_state_machine(id: &str) -> MyStateMachineClient {
+    let state_machine = MyStateMachine::new(format!("log/log-{}.txt", id));
+    MyStateMachineClient {
+        tx: state_machine.run()
+    }
+}
+
+fn get_logger(id: &str, level: slog::Level) -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::CompactFormat::new(decorator).build().fuse();
     let async_drain = slog_async::Async::new(slog::LevelFilter::new(drain, level).fuse())
@@ -35,28 +68,16 @@ fn logger(id: &str, level: slog::Level) -> Logger {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let id = String::from("alpha");
-    let config = NodeConfig::<MyCommand, MyClient> {
-        id: id.clone(),
-        client: HashMap::from([(
-            id.clone(),
-            Arc::new(Mutex::new(MyClient::new(String::from("http://[::1]:50051")))),
-        )]),
-        election_timeout: 1000..2000,
-        heartbeat_period: 1000,
-        majority: 1,
-        _phantom_c: PhantomData,
-    };
-    let addr = "[::1]:50051".parse()?;
-    let executor = MyExecutor {};
-    let logger = logger(&id, slog::Level::Debug);
+    let node_number = get_input();
+    let (id, addr, config) = get_config(node_number);
 
-    let node = Node::new(config, executor, logger);
-    let app = App {
-        node: Arc::new(node),
-        addr: addr,
-    };
+    let state_machine_client = get_state_machine(&id);
+
+    let logger = get_logger(&id, slog::Level::Debug);
+    
+    let client = Node::<MyCommand, MyStateMachineClient, MyClient>::run(config, state_machine_client, logger);
+
+    let app = App { client, addr: addr.parse().unwrap() };
     app.run().await?;
-
     Ok(())
 }

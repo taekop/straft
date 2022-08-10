@@ -204,8 +204,8 @@ name = "example"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "env_logger",
+ "futures",
  "prost",
  "slog",
  "slog-async",
@@ -862,11 +862,8 @@ name = "straft"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
- "futures",
  "rand",
  "slog",
- "tokio",
 ]
 
 [[package]]

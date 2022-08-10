@@ -2,27 +2,25 @@ use crate::Entry;
 use crate::{Command, NodeId};
 use anyhow::Result;
 
-#[async_trait]
 pub trait RPC<C: Command> {
-    async fn append_entries(
-        &self,
-        request: AppendEntriesRequest<C>,
-    ) -> Result<AppendEntriesResponse>;
-    async fn request_vote(&self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
-    async fn append_log(&self, request: AppendLogRequest<C>) -> Result<AppendLogResponse>;
+    fn append_entries(&mut self, request: AppendEntriesRequest<C>) -> Result<AppendEntriesResponse>;
+    fn request_vote(&mut self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
+    fn append_log(&mut self, request: AppendLogRequest<C>) -> Result<AppendLogResponse>;
 }
 
-#[derive(Debug)]
+pub trait RPCClient<C: Command>: 'static + RPC<C> + Clone + Send {}
+
+#[derive(Debug, Clone)]
 pub struct AppendEntriesRequest<C: Command> {
     pub term: u64,
     pub leader_id: NodeId,
-    pub prev_log_index: u64,
+    pub prev_log_index: usize,
     pub prev_log_term: u64,
     pub entries: Vec<Entry<C>>,
-    pub leader_commit: u64,
+    pub leader_commit: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppendEntriesResponse {
     pub term: u64,
     pub success: bool,
@@ -32,22 +30,22 @@ pub struct AppendEntriesResponse {
 pub struct RequestVoteRequest {
     pub term: u64,
     pub candidate_id: NodeId,
-    pub last_log_index: u64,
+    pub last_log_index: usize,
     pub last_log_term: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RequestVoteResponse {
     pub term: u64,
     pub vote_granted: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppendLogRequest<C: Command> {
     pub command: C,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppendLogResponse {
     pub success: bool,
     pub leader_id: Option<NodeId>,

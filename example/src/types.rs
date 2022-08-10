@@ -1,79 +1,110 @@
-use anyhow::Result;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use anyhow::{bail, Result};
+use futures::executor::block_on;
+use std::fs::OpenOptions;
+use std::io::prelude::*;
+use std::sync::mpsc::{self, SyncSender};
+use tokio::runtime::{Builder, Handle, Runtime};
 use tonic::transport::Channel;
 
 use crate::grpc::{
     raft_client::RaftClient, AppendEntriesRequest, AppendLogRequest, RequestVoteRequest,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MyCommand(pub String);
 
 impl straft::Command for MyCommand {}
 
-pub struct MyExecutor {}
-
-impl straft::Executor<MyCommand> for MyExecutor {}
-
+#[derive(Clone)]
 pub struct MyClient {
     pub addr: String,
-    pub client: Arc<Mutex<Option<RaftClient<Channel>>>>,
 }
 
 impl MyClient {
-    pub fn new(addr: String) -> MyClient {
+    pub fn new(mut addr: String) -> MyClient {
+        if !addr.starts_with("http://") {
+            addr = String::from("http://") + &addr;
+        }
         MyClient {
             addr: addr,
-            client: Arc::new(Mutex::new(None)),
         }
     }
-
-    // try until connected
-    pub async fn get_client(&self) -> Result<RaftClient<Channel>> {
-        let mut locked_client = self.client.lock().await;
-        let mut client = match *locked_client {
-            Some(ref client) => client.clone(),
-            None => {
-                let mut client = RaftClient::connect(self.addr.clone()).await?;
-                *locked_client = Some(client.clone());
-                client
-            }
-        };
-        Ok(client)
-    }
 }
 
-#[async_trait]
-impl straft::rpc::RPC<MyCommand> for MyClient {
-    async fn append_entries(
-        &self,
+impl straft::RPC<MyCommand> for MyClient {
+    fn append_entries(
+        &mut self,
         request: straft::rpc::AppendEntriesRequest<MyCommand>,
     ) -> Result<straft::rpc::AppendEntriesResponse> {
-        let mut client = self.get_client().await?;
-        let response = client
-            .append_entries(AppendEntriesRequest::from(request))
-            .await?;
+        let addr = self.addr.clone();
+        let rt = Builder::new_multi_thread().enable_all().build()?;
+        let mut client = rt.block_on(RaftClient::connect(addr))?;
+        let response = rt.block_on(client.append_entries(AppendEntriesRequest::from(request)))?;
         Ok(response.into_inner().into())
     }
-    async fn request_vote(
-        &self,
+    fn request_vote(
+        &mut self,
         request: straft::rpc::RequestVoteRequest,
     ) -> Result<straft::rpc::RequestVoteResponse> {
-        let mut client = self.get_client().await?;
-        let response = client
-            .request_vote(RequestVoteRequest::from(request))
-            .await?;
+        let addr = self.addr.clone();
+        let rt = Builder::new_multi_thread().enable_all().build()?;
+        let mut client = rt.block_on(RaftClient::connect(addr))?;
+        let response = rt.block_on(client.request_vote(RequestVoteRequest::from(request)))?;
         Ok(response.into_inner().into())
     }
-    async fn append_log(
-        &self,
+    fn append_log(
+        &mut self,
         request: straft::rpc::AppendLogRequest<MyCommand>,
     ) -> Result<straft::rpc::AppendLogResponse> {
-        let mut client = self.get_client().await?;
-        let response = client.append_log(AppendLogRequest::from(request)).await?;
+        let addr = self.addr.clone();
+        let rt = Builder::new_multi_thread().enable_all().build()?;
+        let mut client = rt.block_on(RaftClient::connect(addr))?;
+        let response = rt.block_on(client.append_log(AppendLogRequest::from(request)))?;
         Ok(response.into_inner().into())
     }
 }
 
-impl straft::NodeClient<MyCommand> for MyClient {}
+impl straft::RPCClient<MyCommand> for MyClient {}
+
+pub struct MyStateMachine {
+    path: String,
+}
+
+impl MyStateMachine {
+    pub fn new(path: String) -> MyStateMachine {
+        MyStateMachine { path }
+    }
+
+    pub fn run(self) -> SyncSender<MyCommand> {
+        let (tx, rx) = mpsc::sync_channel::<MyCommand>(1);
+        std::thread::spawn(move || {
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(self.path.clone())
+                .unwrap();
+            loop {
+                let req = rx.recv();
+                match req {
+                    Ok(cmd) => {
+                        writeln!(file, "{}", cmd.0);
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        tx
+    }
+}
+
+#[derive(Clone)]
+pub struct MyStateMachineClient {
+    pub tx: SyncSender<MyCommand>,
+}
+
+impl straft::StateMachineClient<MyCommand> for MyStateMachineClient {
+    fn execute(&mut self, command: MyCommand) {
+        self.tx.send(command).unwrap();
+    }
+}

@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::grpc::{
@@ -6,26 +5,17 @@ use crate::grpc::{
     AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
     RequestVoteRequest, RequestVoteResponse,
 };
-use crate::types::{MyClient, MyCommand, MyExecutor};
-use straft::node::Node;
-use straft::rpc::RPC;
+use crate::types::MyCommand;
+use straft::node::client::NodeClient;
 
 pub struct App {
-    pub node: Arc<Node<MyCommand, MyExecutor, MyClient>>,
+    pub client: NodeClient<MyCommand>,
     pub addr: std::net::SocketAddr,
 }
 
 impl App {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         let addr = self.addr.clone();
-        self.node.log_info(String::from("Running..."));
-
-        let heartbeat = tokio::spawn({
-            let node = Arc::clone(&self.node);
-            async move {
-                node.start_heartbeat();
-            }
-        });
 
         Server::builder()
             .add_service(RaftServer::new(self))
@@ -42,23 +32,38 @@ impl Raft for App {
         &self,
         request: Request<AppendEntriesRequest>,
     ) -> Result<Response<AppendEntriesResponse>, Status> {
-        let response = self.node.append_entries(request.into_inner().into()).await;
-        Ok(Response::new(response.unwrap().into()))
+        let client = self.client.clone();
+        let request = straft::RequestMessage::AppendEntries(request.into_inner().into());
+        let response = client.send(request);
+        match response {
+            straft::ResponseMessage::AppendEntries(response) => Ok(Response::new(response.into())),
+            _ => Err(Status::internal("Invalid response type")),
+        }
     }
 
     async fn request_vote(
         &self,
         request: Request<RequestVoteRequest>,
     ) -> Result<Response<RequestVoteResponse>, Status> {
-        let response = self.node.request_vote(request.into_inner().into()).await;
-        Ok(Response::new(response.unwrap().into()))
+        let client = self.client.clone();
+        let request = straft::RequestMessage::RequestVote(request.into_inner().into());
+        let response = client.send(request);
+        match response {
+            straft::ResponseMessage::RequestVote(response) => Ok(Response::new(response.into())),
+            _ => Err(Status::internal("Invalid response type")),
+        }
     }
 
     async fn append_log(
         &self,
         request: Request<AppendLogRequest>,
     ) -> Result<Response<AppendLogResponse>, Status> {
-        let response = self.node.append_log(request.into_inner().into()).await;
-        Ok(Response::new(response.unwrap().into()))
+        let client = self.client.clone();
+        let request = straft::RequestMessage::AppendLog(request.into_inner().into());
+        let response = client.send(request);
+        match response {
+            straft::ResponseMessage::AppendLog(response) => Ok(Response::new(response.into())),
+            _ => Err(Status::internal("Invalid response type")),
+        }
     }
 }
