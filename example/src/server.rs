@@ -4,7 +4,7 @@ extern crate slog_term;
 
 use slog::Drain;
 use std::collections::HashMap;
-use std::io;
+use std::io::{self, Write};
 use std::marker::PhantomData;
 use straft::{Logger, Node, NodeConfig};
 
@@ -15,10 +15,12 @@ mod types;
 use app::App;
 use types::{MyClient, MyCommand, MyStateMachine, MyStateMachineClient};
 
-fn get_input() -> usize {
+fn get_number() -> usize {
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    let n: usize = input.trim().parse().unwrap();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+    let n: usize = input.trim().parse().expect("Failed to parse number");
     n
 }
 
@@ -80,7 +82,9 @@ fn get_logger(id: &str, level: slog::Level) -> Logger {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let node_number = get_input();
+    print!("Node Number (0~2): ");
+    io::stdout().flush().expect("Failed to flush");
+    let node_number = get_number();
     let (id, addr, config) = get_config(node_number);
 
     let state_machine_client = get_state_machine(&id);
@@ -95,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = App {
         client,
-        addr: addr.parse().unwrap(),
+        addr: addr.parse().expect("Failed to parse addr"),
     };
     app.run().await?;
     Ok(())

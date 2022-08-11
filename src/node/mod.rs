@@ -113,7 +113,7 @@ impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Cl
             }
         };
         if let Some(sender) = req.sender {
-            sender.send(res).unwrap();
+            sender.send(res).expect("Failed to send response");
         }
     }
 
@@ -297,7 +297,7 @@ impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Cl
                     self.config
                         .addresses
                         .get(&self.config.id.clone())
-                        .unwrap()
+                        .expect(&format!("Failed to get address of id {}", self.config.id))
                         .clone(),
                 );
                 self.request_append_entries();
@@ -381,7 +381,13 @@ impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Cl
     }
 
     fn detect_other_leader(&mut self, leader_id: String) {
-        self.state.leader_address = Some(self.config.addresses.get(&leader_id).unwrap().clone());
+        self.state.leader_address = Some(
+            self.config
+                .addresses
+                .get(&leader_id)
+                .expect(&format!("Failed to get address of id {}", leader_id))
+                .clone(),
+        );
         self.state.leader_id = Some(leader_id);
     }
 }
