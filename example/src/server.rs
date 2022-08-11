@@ -3,9 +3,9 @@ extern crate slog;
 extern crate slog_term;
 
 use slog::Drain;
+use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
-use std::collections::HashMap;
 use straft::{Logger, Node, NodeConfig};
 
 mod app;
@@ -23,12 +23,24 @@ fn get_input() -> usize {
 }
 
 fn get_config(num: usize) -> (String, String, NodeConfig<MyCommand, MyClient>) {
-    let ids = vec![String::from("alpha"), String::from("beta"), String::from("gamma")];
-    let addrs = vec![String::from("[::1]:50050"), String::from("[::1]:50051"), String::from("[::1]:50052")];
-    let addresses: HashMap<String, String> = ids.iter().cloned().zip(addrs.iter().cloned()).collect();
-    let mut client: HashMap<String, MyClient> = ids.iter().cloned().zip(addrs.iter().cloned()).map(|(id, addr)| {
-        (id, MyClient::new(addr))
-    }).collect();
+    let ids = vec![
+        String::from("alpha"),
+        String::from("beta"),
+        String::from("gamma"),
+    ];
+    let addrs = vec![
+        String::from("[::1]:50050"),
+        String::from("[::1]:50051"),
+        String::from("[::1]:50052"),
+    ];
+    let addresses: HashMap<String, String> =
+        ids.iter().cloned().zip(addrs.iter().cloned()).collect();
+    let mut client: HashMap<String, MyClient> = ids
+        .iter()
+        .cloned()
+        .zip(addrs.iter().cloned())
+        .map(|(id, addr)| (id, MyClient::new(addr)))
+        .collect();
 
     let id = ids[num].clone();
     let addr = addrs[num].clone();
@@ -48,7 +60,7 @@ fn get_config(num: usize) -> (String, String, NodeConfig<MyCommand, MyClient>) {
 fn get_state_machine(id: &str) -> MyStateMachineClient {
     let state_machine = MyStateMachine::new(format!("log/log-{}.txt", id));
     MyStateMachineClient {
-        tx: state_machine.run()
+        tx: state_machine.run(),
     }
 }
 
@@ -74,10 +86,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state_machine_client = get_state_machine(&id);
 
     let logger = get_logger(&id, slog::Level::Debug);
-    
-    let client = Node::<MyCommand, MyStateMachineClient, MyClient>::run(config, state_machine_client, logger);
 
-    let app = App { client, addr: addr.parse().unwrap() };
+    let client = Node::<MyCommand, MyStateMachineClient, MyClient>::run(
+        config,
+        state_machine_client,
+        logger,
+    );
+
+    let app = App {
+        client,
+        addr: addr.parse().unwrap(),
+    };
     app.run().await?;
     Ok(())
 }

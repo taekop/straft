@@ -3,7 +3,8 @@ use crate::{Command, NodeId};
 use anyhow::Result;
 
 pub trait RPC<C: Command> {
-    fn append_entries(&mut self, request: AppendEntriesRequest<C>) -> Result<AppendEntriesResponse>;
+    fn append_entries(&mut self, request: AppendEntriesRequest<C>)
+        -> Result<AppendEntriesResponse>;
     fn request_vote(&mut self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
     fn append_log(&mut self, request: AppendLogRequest<C>) -> Result<AppendLogResponse>;
 }

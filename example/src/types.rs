@@ -1,10 +1,8 @@
-use anyhow::{bail, Result};
-use futures::executor::block_on;
+use anyhow::Result;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::sync::mpsc::{self, SyncSender};
-use tokio::runtime::{Builder, Handle, Runtime};
-use tonic::transport::Channel;
+use tokio::runtime::Builder;
 
 use crate::grpc::{
     raft_client::RaftClient, AppendEntriesRequest, AppendLogRequest, RequestVoteRequest,
@@ -25,9 +23,7 @@ impl MyClient {
         if !addr.starts_with("http://") {
             addr = String::from("http://") + &addr;
         }
-        MyClient {
-            addr: addr,
-        }
+        MyClient { addr: addr }
     }
 }
 
@@ -88,11 +84,15 @@ impl MyStateMachine {
                 let req = rx.recv();
                 match req {
                     Ok(cmd) => {
-                        writeln!(file, "{}", cmd.0);
+                        let res = writeln!(file, "{}", cmd.0);
+                        if res.is_err() {
+                            break;
+                        }
                     }
                     Err(_) => break,
                 }
             }
+            std::process::exit(1);
         });
         tx
     }

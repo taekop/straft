@@ -1,10 +1,13 @@
-use std::io;
 use raft_client::RaftClient;
+use std::io;
 use tonic::transport::Channel;
 
 tonic::include_proto!("raft");
 
-async fn append_log(client: &mut RaftClient<Channel>, command: String) -> Result<tonic::Response<AppendLogResponse>, Box<dyn std::error::Error>> {
+async fn append_log(
+    client: &mut RaftClient<Channel>,
+    command: String,
+) -> Result<tonic::Response<AppendLogResponse>, Box<dyn std::error::Error>> {
     let request = tonic::Request::new(AppendLogRequest {
         command: Some(command),
     });
@@ -24,7 +27,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if response.leader_id.is_none() || response.leader_address.is_none() {
             println!("Leader not found");
         } else {
-            println!("Retry to leader: {:?} {:?}", response.leader_id.unwrap(), response.leader_address.unwrap());
+            println!(
+                "Retry to leader: {:?} {:?}",
+                response.leader_id.unwrap(),
+                response.leader_address.unwrap()
+            );
         }
     }
     Ok(())

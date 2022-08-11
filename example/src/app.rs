@@ -6,8 +6,9 @@ use crate::grpc::{
     RequestVoteRequest, RequestVoteResponse,
 };
 use crate::types::MyCommand;
-use straft::node::client::NodeClient;
+use straft::NodeClient;
 
+// RPC(gRPC) provider for Raft Node
 pub struct App {
     pub client: NodeClient<MyCommand>,
     pub addr: std::net::SocketAddr,

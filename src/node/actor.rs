@@ -23,7 +23,7 @@ pub enum RequestMessage<C: Command> {
     // called by self
     Heartbeat,
     AppendEntriesResult(u64, NodeId, usize, AppendEntriesResponse), // leader term, follower id, last log index
-    RequestVoteResult(u64, NodeId, RequestVoteResponse), // candidate term, follower id
+    RequestVoteResult(u64, NodeId, RequestVoteResponse),            // candidate term, follower id
 }
 
 #[derive(Debug)]

@@ -13,6 +13,7 @@ pub mod state_machine;
 pub use node::logger::Logger;
 pub use node::{
     actor::{RequestMessage, ResponseMessage},
+    client::NodeClient,
     Node,
 };
 pub use rpc::{RPCClient, RPC};
