@@ -17,8 +17,8 @@ use self::{
 
 use crate::{
     rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
-        RPCClient, RequestVoteRequest, RequestVoteResponse,
+        AppendEntriesRequest, AppendEntriesResponse, RPCClient, ReadRequest, ReadResponse,
+        RequestVoteRequest, RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
     Entry, NodeConfig, NodeId, ResponseMessage,
@@ -90,27 +90,63 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
         }
     }
 
-    fn handle_append_log(&mut self, req: AppendLogRequest) -> AppendLogResponse {
+    fn handle_write(&mut self, req: WriteRequest) -> mpsc::Receiver<ResponseMessage> {
+        let (tx, rx) = mpsc::sync_channel(1);
         if self.state.is_role(Role::LEADER) {
+            let (tx2, rx2) = mpsc::sync_channel(1);
             let last_log = self.state.last_log();
             let new_entry = Entry {
                 index: last_log.index + 1,
                 term: self.state.current_term,
                 command: req.command,
+                sender: Some(tx2),
             };
             self.state.log.push(new_entry);
-            AppendLogResponse {
-                success: true,
-                leader_id: self.state.leader_id.clone(),
-                leader_address: self.state.leader_address.clone(),
-            }
+            std::thread::spawn(move || {
+                let (message, success) = match rx2.recv() {
+                    Ok(Ok(message)) => (message, true),
+                    Ok(Err(message)) => (message.to_string(), false),
+                    Err(message) => (message.to_string(), false),
+                };
+
+                tx.send(ResponseMessage::Write(WriteResponse {
+                    message,
+                    success,
+                    leader_id: None,
+                    leader_address: None,
+                }))
+                .ok();
+            });
         } else {
-            AppendLogResponse {
+            tx.send(ResponseMessage::Write(WriteResponse {
+                message: format!("Retry to leader"),
                 success: false,
                 leader_id: self.state.leader_id.clone(),
                 leader_address: self.state.leader_address.clone(),
-            }
+            }))
+            .ok();
         }
+        rx
+    }
+
+    fn handle_read(&mut self, req: ReadRequest) -> mpsc::Receiver<ResponseMessage> {
+        let (tx, rx) = mpsc::sync_channel(1);
+        let state_machine = self.state_machine.clone();
+        std::thread::spawn(move || {
+            let res = state_machine.read(req.command);
+            let (message, success) = match res {
+                Ok(message) => (message, true),
+                Err(message) => (message.to_string(), false),
+            };
+            tx.send(ResponseMessage::Read(ReadResponse {
+                message,
+                success,
+                leader_id: None,
+                leader_address: None,
+            }))
+            .ok();
+        });
+        rx
     }
 
     fn handle_heartbeat(&mut self) -> ResponseMessage {
@@ -125,7 +161,7 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                 self.state.log[self.state.last_applied + 1..=self.state.commit_index].iter()
             {
                 self.log_debug(format!("Execute: {:?}", entry.command));
-                self.state_machine.execute(entry.command.clone());
+                self.apply(entry.clone());
             }
             self.state.last_applied = self.state.commit_index;
         }
@@ -198,6 +234,14 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
             }
         }
         ResponseMessage::RequestVoteResult
+    }
+
+    fn apply(&self, entry: Entry) {
+        let (tx, command) = (entry.sender, entry.command);
+        let res = self.state_machine.write(command);
+        if let Some(sender) = tx {
+            sender.send(res).ok();
+        }
     }
 
     fn change_role(&mut self, role: Role) {

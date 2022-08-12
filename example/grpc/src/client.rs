@@ -1,17 +1,37 @@
 use raft_client::RaftClient;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
 use tonic::transport::Channel;
 
 tonic::include_proto!("raft");
 
-async fn append_log(
+fn hash<T: Hash>(a: T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    a.hash(&mut hasher);
+    hasher.finish()
+}
+
+async fn write(
     client: &mut RaftClient<Channel>,
     command: String,
-) -> Result<tonic::Response<AppendLogResponse>, Box<dyn std::error::Error>> {
-    let request = tonic::Request::new(AppendLogRequest {
+) -> Result<tonic::Response<WriteResponse>, Box<dyn std::error::Error>> {
+    let request = tonic::Request::new(WriteRequest {
+        uid: Some(hash(&command)),
         command: Some(command),
     });
-    let response = client.append_log(request).await?;
+    let response = client.write(request).await?;
+    Ok(response)
+}
+
+async fn read(
+    client: &mut RaftClient<Channel>,
+    command: String,
+) -> Result<tonic::Response<ReadResponse>, Box<dyn std::error::Error>> {
+    let request = tonic::Request::new(ReadRequest {
+        command: Some(command),
+    });
+    let response = client.read(request).await?;
     Ok(response)
 }
 
@@ -24,12 +44,12 @@ fn get_number() -> usize {
     n
 }
 
-fn get_command() -> String {
-    let mut command = String::new();
+fn get_line() -> String {
+    let mut line = String::new();
     io::stdin()
-        .read_line(&mut command)
+        .read_line(&mut line)
         .expect("Failed to read line");
-    command
+    line.trim().to_string()
 }
 
 #[tokio::main]
@@ -41,23 +61,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("http://[::1]:{}", port);
     let mut client = RaftClient::connect(addr).await?;
 
+    print!("Read or Write(R/W): ");
+    io::stdout().flush().expect("Failed to flush");
+    let is_read = {
+        let line = get_line();
+        if line.starts_with("R") || line.starts_with("r") {
+            true
+        } else if line.starts_with("W") || line.starts_with("w") {
+            false
+        } else {
+            panic!("Read or Write?");
+        }
+    };
+
     print!("Enter Command: ");
     io::stdout().flush().expect("Failed to flush");
-    let command = get_command();
+    let command = get_line();
 
-    let response = append_log(&mut client, command).await?.into_inner();
-    if response.success.unwrap() {
-        println!("Success");
+    if is_read {
+        let response = read(&mut client, command).await?.into_inner();
+        println!("{response:?}");
     } else {
-        if response.leader_id.is_none() || response.leader_address.is_none() {
-            println!("Leader not found");
-        } else {
-            println!(
-                "Retry to leader: {:?} {:?}",
-                response.leader_id.unwrap(),
-                response.leader_address.unwrap()
-            );
-        }
+        let response = write(&mut client, command).await?.into_inner();
+        println!("{response:?}");
     }
     Ok(())
 }

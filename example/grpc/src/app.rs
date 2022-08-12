@@ -1,13 +1,15 @@
+// RPC(gRPC) server provider for Raft Node
+// Get request from either external client or other nodes
+
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::grpc::{
     raft_server::{Raft, RaftServer},
-    AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
-    RequestVoteRequest, RequestVoteResponse,
+    AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
+    RequestVoteResponse, WriteRequest, WriteResponse,
 };
 use straft::NodeClient;
 
-// RPC(gRPC) provider for Raft Node
 pub struct App {
     pub client: NodeClient,
     pub addr: std::net::SocketAddr,
@@ -54,15 +56,25 @@ impl Raft for App {
         }
     }
 
-    async fn append_log(
+    async fn write(
         &self,
-        request: Request<AppendLogRequest>,
-    ) -> Result<Response<AppendLogResponse>, Status> {
+        request: Request<WriteRequest>,
+    ) -> Result<Response<WriteResponse>, Status> {
         let client = self.client.clone();
-        let request = straft::RequestMessage::AppendLog(request.into_inner().into());
+        let request = straft::RequestMessage::Write(request.into_inner().into());
         let response = client.send(request);
         match response {
-            straft::ResponseMessage::AppendLog(response) => Ok(Response::new(response.into())),
+            straft::ResponseMessage::Write(response) => Ok(Response::new(response.into())),
+            _ => Err(Status::internal("Invalid response type")),
+        }
+    }
+
+    async fn read(&self, request: Request<ReadRequest>) -> Result<Response<ReadResponse>, Status> {
+        let client = self.client.clone();
+        let request = straft::RequestMessage::Read(request.into_inner().into());
+        let response = client.send(request);
+        match response {
+            straft::ResponseMessage::Read(response) => Ok(Response::new(response.into())),
             _ => Err(Status::internal("Invalid response type")),
         }
     }

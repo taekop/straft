@@ -7,8 +7,8 @@ use crate::{
         client::NodeClient, election_timer::ElectionTimer, logger::Logger, state::NodeState, Node,
     },
     rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, AppendLogRequest, AppendLogResponse,
-        RPCClient, RequestVoteRequest, RequestVoteResponse,
+        AppendEntriesRequest, AppendEntriesResponse, RPCClient, ReadRequest, ReadResponse,
+        RequestVoteRequest, RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
     NodeConfig, NodeId,
@@ -25,7 +25,8 @@ pub enum RequestMessage {
     // rpc, called by external
     AppendEntries(AppendEntriesRequest),
     RequestVote(RequestVoteRequest),
-    AppendLog(AppendLogRequest),
+    Write(WriteRequest),
+    Read(ReadRequest),
     // called by self
     Heartbeat,
     AppendEntriesResult(u64, NodeId, usize, AppendEntriesResponse), // leader term, follower id, last log index
@@ -36,10 +37,14 @@ pub enum RequestMessage {
 pub enum ResponseMessage {
     AppendEntries(AppendEntriesResponse),
     RequestVote(RequestVoteResponse),
-    AppendLog(AppendLogResponse),
+    Write(WriteResponse),
+    Read(ReadResponse),
     Heartbeat,
     AppendEntriesResult,
     RequestVoteResult,
+    // recursive
+    WriteResult(mpsc::Receiver<ResponseMessage>),
+    ReadResult(mpsc::Receiver<ResponseMessage>),
 }
 
 impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
@@ -107,9 +112,8 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
             RequestMessage::RequestVote(msg) => {
                 ResponseMessage::RequestVote(self.handle_request_vote(msg))
             }
-            RequestMessage::AppendLog(msg) => {
-                ResponseMessage::AppendLog(self.handle_append_log(msg))
-            }
+            RequestMessage::Write(msg) => ResponseMessage::WriteResult(self.handle_write(msg)),
+            RequestMessage::Read(msg) => ResponseMessage::ReadResult(self.handle_read(msg)),
             RequestMessage::Heartbeat => self.handle_heartbeat(),
             RequestMessage::AppendEntriesResult(leader_term, follower_id, last_log_index, msg) => {
                 self.handle_append_entries_result(leader_term, follower_id, last_log_index, msg)
@@ -119,7 +123,18 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
             }
         };
         if let Some(sender) = req.sender {
-            sender.send(res).expect("Failed to send response");
+            match res {
+                ResponseMessage::WriteResult(rx) | ResponseMessage::ReadResult(rx) => {
+                    std::thread::spawn(move || {
+                        if let Ok(msg) = rx.recv() {
+                            sender.send(msg).ok();
+                        }
+                    });
+                }
+                res => {
+                    sender.send(res).ok();
+                }
+            };
         }
     }
 }

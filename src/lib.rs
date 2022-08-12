@@ -1,9 +1,11 @@
 #[macro_use]
 extern crate slog;
 
+use anyhow::Result;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
+use std::sync::mpsc::SyncSender;
 
 pub mod node;
 pub mod rpc;
@@ -19,7 +21,6 @@ pub use rpc::{RPCClient, RPC};
 pub use state_machine::StateMachineClient;
 
 pub type NodeId = String;
-pub type Command = String;
 
 pub struct NodeConfig<Client: RPCClient> {
     pub id: NodeId,
@@ -34,5 +35,7 @@ pub struct NodeConfig<Client: RPCClient> {
 pub struct Entry {
     pub index: usize,
     pub term: u64,
-    pub command: Command,
+    pub command: String,
+    // send response when applied to state machine
+    pub sender: Option<SyncSender<Result<String>>>,
 }

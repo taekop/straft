@@ -9,10 +9,12 @@ use straft::{Logger, Node, NodeConfig};
 
 mod app;
 mod grpc;
-mod types;
+mod my_client;
+mod state_machine;
 
 use app::App;
-use types::{MyClient, MyStateMachine, MyStateMachineClient};
+use my_client::MyClient;
+use state_machine::{MyStateMachine, MyStateMachineClient};
 
 fn get_number() -> usize {
     let mut input = String::new();

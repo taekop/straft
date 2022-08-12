@@ -34,18 +34,32 @@ message RequestVoteResponse {
     optional bool vote_granted = 2;
 }
 
-message AppendLogRequest {
+message WriteRequest {
+    optional string command = 1;
+    optional uint64 uid = 2;
+}
+
+message WriteResponse {
+    optional string message = 1;
+    optional bool success = 2;
+    optional string leader_id = 3;
+    optional string leader_address = 4;
+}
+
+message ReadRequest {
     optional string command = 1;
 }
 
-message AppendLogResponse {
-    optional bool success = 1;
-    optional string leader_id = 2;
-    optional string leader_address = 3;
+message ReadResponse {
+    optional string message = 1;
+    optional bool success = 2;
+    optional string leader_id = 3;
+    optional string leader_address = 4;
 }
 
 service Raft {
     rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse) {}
     rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
-    rpc AppendLog(AppendLogRequest) returns(AppendLogResponse) {}
+    rpc Write(WriteRequest) returns(WriteResponse) {}
+    rpc Read(ReadRequest) returns(ReadResponse) {}
 }

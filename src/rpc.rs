@@ -1,11 +1,12 @@
-use crate::Entry;
-use crate::{Command, NodeId};
 use anyhow::Result;
+
+use crate::{Entry, NodeId};
 
 pub trait RPC {
     fn append_entries(&mut self, request: AppendEntriesRequest) -> Result<AppendEntriesResponse>;
     fn request_vote(&mut self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
-    fn append_log(&mut self, request: AppendLogRequest) -> Result<AppendLogResponse>;
+    fn write(&mut self, request: WriteRequest) -> Result<WriteResponse>;
+    fn read(&mut self, request: ReadRequest) -> Result<ReadResponse>;
 }
 
 pub trait RPCClient: 'static + RPC + Clone + Send {}
@@ -41,12 +42,27 @@ pub struct RequestVoteResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct AppendLogRequest {
-    pub command: Command,
+pub struct WriteRequest {
+    pub command: String,
+    pub uid: u64,
 }
 
 #[derive(Debug, Clone)]
-pub struct AppendLogResponse {
+pub struct WriteResponse {
+    pub message: String,
+    pub success: bool,
+    pub leader_id: Option<NodeId>,
+    pub leader_address: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReadRequest {
+    pub command: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReadResponse {
+    pub message: String,
     pub success: bool,
     pub leader_id: Option<NodeId>,
     pub leader_address: Option<String>,

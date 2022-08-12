@@ -1,5 +1,6 @@
-use crate::{Command, Entry, NodeId};
 use std::collections::HashMap;
+
+use crate::{Entry, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Role {
@@ -38,7 +39,8 @@ impl NodeState {
             log: vec![Entry {
                 index: 0,
                 term: 0,
-                command: Command::default(),
+                command: String::default(),
+                sender: None,
             }],
             commit_index: 0,
             last_applied: 0,
