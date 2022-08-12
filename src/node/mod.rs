@@ -21,21 +21,21 @@ use crate::{
         RPCClient, RequestVoteRequest, RequestVoteResponse,
     },
     state_machine::StateMachineClient,
-    Command, Entry, NodeConfig, NodeId, ResponseMessage,
+    Entry, NodeConfig, NodeId, ResponseMessage,
 };
 
-pub struct Node<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> {
-    config: NodeConfig<C, Client>,
+pub struct Node<SM: StateMachineClient, Client: RPCClient> {
+    config: NodeConfig<Client>,
     election_timer: ElectionTimer,
     logger: Logger,
-    receiver: mpsc::Receiver<Request<C>>,
-    self_client: NodeClient<C>,
-    state: NodeState<C>,
+    receiver: mpsc::Receiver<Request>,
+    self_client: NodeClient,
+    state: NodeState,
     state_machine: SM,
 }
 
-impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Client> {
-    fn handle_append_entries(&mut self, req: AppendEntriesRequest<C>) -> AppendEntriesResponse {
+impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
+    fn handle_append_entries(&mut self, req: AppendEntriesRequest) -> AppendEntriesResponse {
         self.election_timer.reset();
         if req.term > self.state.current_term && !self.state.is_role(Role::FOLLOWER) {
             self.change_role(Role::FOLLOWER);
@@ -90,7 +90,7 @@ impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Cl
         }
     }
 
-    fn handle_append_log(&mut self, req: AppendLogRequest<C>) -> AppendLogResponse {
+    fn handle_append_log(&mut self, req: AppendLogRequest) -> AppendLogResponse {
         if self.state.is_role(Role::LEADER) {
             let last_log = self.state.last_log();
             let new_entry = Entry {

@@ -1,21 +1,18 @@
 use std::sync::mpsc;
 
-use crate::{
-    node::actor::{Request, RequestMessage, ResponseMessage},
-    Command,
-};
+use crate::node::actor::{Request, RequestMessage, ResponseMessage};
 
 #[derive(Clone)]
-pub struct NodeClient<C: Command> {
-    sender: mpsc::SyncSender<Request<C>>,
+pub struct NodeClient {
+    sender: mpsc::SyncSender<Request>,
 }
 
-impl<C: Command> NodeClient<C> {
-    pub fn new(sender: mpsc::SyncSender<Request<C>>) -> NodeClient<C> {
+impl NodeClient {
+    pub fn new(sender: mpsc::SyncSender<Request>) -> NodeClient {
         NodeClient { sender }
     }
 
-    pub fn send(&self, msg: RequestMessage<C>) -> ResponseMessage {
+    pub fn send(&self, msg: RequestMessage) -> ResponseMessage {
         let (tx, rx) = std::sync::mpsc::channel();
         let req = Request {
             msg: msg,

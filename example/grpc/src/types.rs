@@ -8,11 +8,6 @@ use crate::grpc::{
     raft_client::RaftClient, AppendEntriesRequest, AppendLogRequest, RequestVoteRequest,
 };
 
-#[derive(Debug, Default, Clone)]
-pub struct MyCommand(pub String);
-
-impl straft::Command for MyCommand {}
-
 #[derive(Clone)]
 pub struct MyClient {
     pub addr: String,
@@ -27,10 +22,10 @@ impl MyClient {
     }
 }
 
-impl straft::RPC<MyCommand> for MyClient {
+impl straft::RPC for MyClient {
     fn append_entries(
         &mut self,
-        request: straft::rpc::AppendEntriesRequest<MyCommand>,
+        request: straft::rpc::AppendEntriesRequest,
     ) -> Result<straft::rpc::AppendEntriesResponse> {
         let addr = self.addr.clone();
         let rt = Builder::new_multi_thread().enable_all().build()?;
@@ -50,7 +45,7 @@ impl straft::RPC<MyCommand> for MyClient {
     }
     fn append_log(
         &mut self,
-        request: straft::rpc::AppendLogRequest<MyCommand>,
+        request: straft::rpc::AppendLogRequest,
     ) -> Result<straft::rpc::AppendLogResponse> {
         let addr = self.addr.clone();
         let rt = Builder::new_multi_thread().enable_all().build()?;
@@ -60,7 +55,7 @@ impl straft::RPC<MyCommand> for MyClient {
     }
 }
 
-impl straft::RPCClient<MyCommand> for MyClient {}
+impl straft::RPCClient for MyClient {}
 
 pub struct MyStateMachine {
     path: String,
@@ -71,8 +66,8 @@ impl MyStateMachine {
         MyStateMachine { path }
     }
 
-    pub fn run(self) -> SyncSender<MyCommand> {
-        let (tx, rx) = mpsc::sync_channel::<MyCommand>(1);
+    pub fn run(self) -> SyncSender<String> {
+        let (tx, rx) = mpsc::sync_channel::<String>(1);
         std::thread::spawn(move || {
             let mut file = OpenOptions::new()
                 .create(true)
@@ -84,7 +79,7 @@ impl MyStateMachine {
                 let req = rx.recv();
                 match req {
                     Ok(cmd) => {
-                        let res = writeln!(file, "{}", cmd.0);
+                        let res = writeln!(file, "{}", cmd);
                         if res.is_err() {
                             break;
                         }
@@ -100,11 +95,11 @@ impl MyStateMachine {
 
 #[derive(Clone)]
 pub struct MyStateMachineClient {
-    pub tx: SyncSender<MyCommand>,
+    pub tx: SyncSender<String>,
 }
 
-impl straft::StateMachineClient<MyCommand> for MyStateMachineClient {
-    fn execute(&mut self, command: MyCommand) {
+impl straft::StateMachineClient for MyStateMachineClient {
+    fn execute(&mut self, command: String) {
         self.tx.send(command).unwrap();
     }
 }

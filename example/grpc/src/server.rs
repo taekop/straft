@@ -5,7 +5,6 @@ extern crate slog_term;
 use slog::Drain;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::marker::PhantomData;
 use straft::{Logger, Node, NodeConfig};
 
 mod app;
@@ -13,7 +12,7 @@ mod grpc;
 mod types;
 
 use app::App;
-use types::{MyClient, MyCommand, MyStateMachine, MyStateMachineClient};
+use types::{MyClient, MyStateMachine, MyStateMachineClient};
 
 fn get_number() -> usize {
     let mut input = String::new();
@@ -24,7 +23,7 @@ fn get_number() -> usize {
     n
 }
 
-fn get_config(num: usize) -> (String, String, NodeConfig<MyCommand, MyClient>) {
+fn get_config(num: usize) -> (String, String, NodeConfig<MyClient>) {
     let ids = vec![
         String::from("alpha"),
         String::from("beta"),
@@ -54,7 +53,6 @@ fn get_config(num: usize) -> (String, String, NodeConfig<MyCommand, MyClient>) {
         election_timeout: 1000..2000,
         heartbeat_period: 200,
         majority: 2,
-        _phantom_c: PhantomData,
     };
     (id, addr, config)
 }
@@ -91,11 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let logger = get_logger(&id, slog::Level::Debug);
 
-    let client = Node::<MyCommand, MyStateMachineClient, MyClient>::run(
-        config,
-        state_machine_client,
-        logger,
-    );
+    let client = Node::<MyStateMachineClient, MyClient>::run(config, state_machine_client, logger);
 
     let app = App {
         client,

@@ -8,13 +8,13 @@ pub enum Role {
     LEADER,
 }
 
-pub struct NodeState<C: Command> {
+pub struct NodeState {
     // role
     pub role: Role,
     // persistent
     pub current_term: u64,
     pub voted_for: Option<NodeId>,
-    pub log: Vec<Entry<C>>,
+    pub log: Vec<Entry>,
     // volatile
     pub commit_index: usize,
     pub last_applied: usize,
@@ -29,7 +29,7 @@ pub struct NodeState<C: Command> {
     pub leader_address: Option<String>,
 }
 
-impl<C: Command> NodeState<C> {
+impl NodeState {
     pub fn new() -> Self {
         NodeState {
             role: Role::FOLLOWER,
@@ -38,7 +38,7 @@ impl<C: Command> NodeState<C> {
             log: vec![Entry {
                 index: 0,
                 term: 0,
-                command: C::default(),
+                command: Command::default(),
             }],
             commit_index: 0,
             last_applied: 0,
@@ -71,7 +71,7 @@ impl<C: Command> NodeState<C> {
         self.role = _role;
     }
 
-    pub fn last_log(&self) -> &Entry<C> {
+    pub fn last_log(&self) -> &Entry {
         self.log.last().unwrap()
     }
 }

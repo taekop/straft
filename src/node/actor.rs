@@ -11,21 +11,21 @@ use crate::{
         RPCClient, RequestVoteRequest, RequestVoteResponse,
     },
     state_machine::StateMachineClient,
-    Command, NodeConfig, NodeId,
+    NodeConfig, NodeId,
 };
 
 #[derive(Debug)]
-pub struct Request<C: Command> {
-    pub msg: RequestMessage<C>,
+pub struct Request {
+    pub msg: RequestMessage,
     pub sender: Option<mpsc::Sender<ResponseMessage>>,
 }
 
 #[derive(Debug)]
-pub enum RequestMessage<C: Command> {
+pub enum RequestMessage {
     // rpc, called by external
-    AppendEntries(AppendEntriesRequest<C>),
+    AppendEntries(AppendEntriesRequest),
     RequestVote(RequestVoteRequest),
-    AppendLog(AppendLogRequest<C>),
+    AppendLog(AppendLogRequest),
     // called by self
     Heartbeat,
     AppendEntriesResult(u64, NodeId, usize, AppendEntriesResponse), // leader term, follower id, last log index
@@ -42,8 +42,8 @@ pub enum ResponseMessage {
     RequestVoteResult,
 }
 
-impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Client> {
-    pub fn run(config: NodeConfig<C, Client>, state_machine: SM, logger: Logger) -> NodeClient<C> {
+impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
+    pub fn run(config: NodeConfig<Client>, state_machine: SM, logger: Logger) -> NodeClient {
         let (tx, rx) = mpsc::sync_channel(32);
 
         let client = NodeClient::new(tx);
@@ -58,12 +58,12 @@ impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Cl
     }
 
     fn new(
-        config: NodeConfig<C, Client>,
+        config: NodeConfig<Client>,
         state_machine: SM,
         logger: Logger,
-        receiver: mpsc::Receiver<Request<C>>,
-        self_client: NodeClient<C>,
-    ) -> Node<C, SM, Client> {
+        receiver: mpsc::Receiver<Request>,
+        self_client: NodeClient,
+    ) -> Node<SM, Client> {
         let election_timeout = config.election_timeout.clone();
         Node {
             config,
@@ -98,7 +98,7 @@ impl<C: Command, SM: StateMachineClient<C>, Client: RPCClient<C>> Node<C, SM, Cl
         }
     }
 
-    pub fn handle(&mut self, req: Request<C>) {
+    pub fn handle(&mut self, req: Request) {
         self.log_debug(format!("Got Request: {:?}", req.msg));
         let res = match req.msg {
             RequestMessage::AppendEntries(msg) => {

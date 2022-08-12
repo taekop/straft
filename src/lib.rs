@@ -3,7 +3,6 @@ extern crate slog;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::ops::Range;
 
 pub mod node;
@@ -20,21 +19,20 @@ pub use rpc::{RPCClient, RPC};
 pub use state_machine::StateMachineClient;
 
 pub type NodeId = String;
-pub trait Command: 'static + Debug + Default + Clone + Send + Sync {}
+pub type Command = String;
 
-pub struct NodeConfig<C: Command, Client: RPCClient<C>> {
+pub struct NodeConfig<Client: RPCClient> {
     pub id: NodeId,
     pub addresses: HashMap<NodeId, String>,
     pub client: HashMap<NodeId, Client>,
     pub election_timeout: Range<u64>,
     pub heartbeat_period: u64,
     pub majority: u64,
-    pub _phantom_c: PhantomData<C>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Entry<C: Command> {
+pub struct Entry {
     pub index: usize,
     pub term: u64,
-    pub command: C,
+    pub command: Command,
 }
