@@ -1,12 +1,12 @@
 extern crate slog;
 
+use crate::node::client::ExternalNodeClient;
 use crate::node::Node;
 use crate::node::StateMachineClient;
-use crate::rpc::RPCClient;
 
 pub type Logger = slog::Logger;
 
-impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
+impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     pub fn log_trace(&self, msg: String) {
         trace!(self.logger, "{}", msg);
     }

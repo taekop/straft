@@ -3,9 +3,9 @@ extern crate slog;
 extern crate slog_term;
 
 use slog::Drain;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
-use straft::{Logger, Node, NodeConfig};
+use straft::{ClusterConfig, Logger, Node};
 
 mod app;
 mod grpc;
@@ -25,38 +25,29 @@ fn get_number() -> usize {
     n
 }
 
-fn get_config(num: usize) -> (String, String, NodeConfig<MyClient>) {
+fn get_config(num: usize) -> (String, String, ClusterConfig, MyClient) {
     let ids = vec![
         String::from("alpha"),
         String::from("beta"),
         String::from("gamma"),
     ];
     let addrs = vec![
-        String::from("[::1]:50050"),
-        String::from("[::1]:50051"),
-        String::from("[::1]:50052"),
+        String::from("http://[::1]:50050"),
+        String::from("http://[::1]:50052"),
+        String::from("http://[::1]:50051"),
     ];
-    let addresses: HashMap<String, String> =
-        ids.iter().cloned().zip(addrs.iter().cloned()).collect();
-    let mut client: HashMap<String, MyClient> = ids
-        .iter()
-        .cloned()
-        .zip(addrs.iter().cloned())
-        .map(|(id, addr)| (id, MyClient::new(addr)))
-        .collect();
+    let id_addr: HashMap<String, String> = ids.iter().cloned().zip(addrs.iter().cloned()).collect();
+    let external_client = MyClient::new(id_addr);
 
     let id = ids[num].clone();
     let addr = addrs[num].clone();
-    client.remove(&id.clone());
-    let config = NodeConfig {
-        id: id.clone(),
-        addresses: addresses,
-        client: client,
+    let config = ClusterConfig {
+        members: HashSet::from_iter(ids.into_iter()),
         election_timeout: 1000..2000,
         heartbeat_period: 200,
         majority: 2,
     };
-    (id, addr, config)
+    (id, addr, config, external_client)
 }
 
 fn get_state_machine(id: &str) -> MyStateMachineClient {
@@ -85,17 +76,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print!("Node Number (0~2): ");
     io::stdout().flush().expect("Failed to flush");
     let node_number = get_number();
-    let (id, addr, config) = get_config(node_number);
+    let (id, addr, config, external_client) = get_config(node_number);
 
     let state_machine_client = get_state_machine(&id);
 
     let logger = get_logger(&id, slog::Level::Debug);
 
-    let client = Node::<MyStateMachineClient, MyClient>::run(config, state_machine_client, logger);
+    let client = Node::<MyStateMachineClient, MyClient>::run(
+        id,
+        config,
+        state_machine_client,
+        logger,
+        external_client,
+    );
 
     let app = App {
         client,
-        addr: addr.parse().expect("Failed to parse addr"),
+        addr: addr[7..].parse().expect("Failed to parse addr"),
     };
     app.run().await?;
     Ok(())

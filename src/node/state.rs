@@ -28,7 +28,6 @@ pub struct NodeState {
     pub match_index: HashMap<NodeId, usize>,
     // extra
     pub leader_id: Option<NodeId>,
-    pub leader_address: Option<String>,
     write_responser: Vec<Option<SyncSender<Result<String>>>>,
 }
 
@@ -50,7 +49,6 @@ impl NodeState {
             next_index: HashMap::new(),
             match_index: HashMap::new(),
             leader_id: None,
-            leader_address: None,
             write_responser: vec![None],
         }
     }
@@ -60,9 +58,8 @@ impl NodeState {
         self.vote_cnt = 1;
     }
 
-    pub fn initialize_leader_state(&mut self, id: NodeId, address: String) {
+    pub fn initialize_leader_state(&mut self, id: NodeId) {
         self.leader_id = Some(id);
-        self.leader_address = Some(address);
         self.next_index = HashMap::new();
         self.match_index = HashMap::new();
     }

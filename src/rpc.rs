@@ -1,15 +1,4 @@
-use anyhow::Result;
-
 use crate::{Entry, NodeId};
-
-pub trait RPC {
-    fn append_entries(&mut self, request: AppendEntriesRequest) -> Result<AppendEntriesResponse>;
-    fn request_vote(&mut self, request: RequestVoteRequest) -> Result<RequestVoteResponse>;
-    fn write(&mut self, request: WriteRequest) -> Result<WriteResponse>;
-    fn read(&mut self, request: ReadRequest) -> Result<ReadResponse>;
-}
-
-pub trait RPCClient: 'static + RPC + Clone + Send {}
 
 #[derive(Debug, Clone)]
 pub struct AppendEntriesRequest {
@@ -51,7 +40,6 @@ pub struct WriteResponse {
     pub message: String,
     pub success: bool,
     pub leader_id: Option<NodeId>,
-    pub leader_address: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,5 +52,4 @@ pub struct ReadResponse {
     pub message: String,
     pub success: bool,
     pub leader_id: Option<NodeId>,
-    pub leader_address: Option<String>,
 }

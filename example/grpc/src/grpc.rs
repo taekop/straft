@@ -129,7 +129,6 @@ impl Into<straft::rpc::WriteResponse> for WriteResponse {
             message: self.message.unwrap(),
             success: self.success.unwrap(),
             leader_id: self.leader_id,
-            leader_address: self.leader_address,
         }
     }
 }
@@ -140,7 +139,6 @@ impl From<straft::rpc::WriteResponse> for WriteResponse {
             message: Some(res.message),
             success: Some(res.success),
             leader_id: res.leader_id,
-            leader_address: res.leader_address,
         }
     }
 }
@@ -167,7 +165,6 @@ impl Into<straft::rpc::ReadResponse> for ReadResponse {
             message: self.message.unwrap(),
             success: self.success.unwrap(),
             leader_id: self.leader_id,
-            leader_address: self.leader_address,
         }
     }
 }
@@ -178,7 +175,6 @@ impl From<straft::rpc::ReadResponse> for ReadResponse {
             message: Some(res.message),
             success: Some(res.success),
             leader_id: res.leader_id,
-            leader_address: res.leader_address,
         }
     }
 }

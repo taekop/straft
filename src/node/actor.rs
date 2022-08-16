@@ -4,14 +4,18 @@ use std::time::Duration;
 
 use crate::{
     node::{
-        client::NodeClient, election_timer::ElectionTimer, logger::Logger, state::NodeState, Node,
+        client::{ExternalNodeClient, InternalNodeClient},
+        election_timer::ElectionTimer,
+        logger::Logger,
+        state::NodeState,
+        Node,
     },
     rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, RPCClient, ReadRequest, ReadResponse,
-        RequestVoteRequest, RequestVoteResponse, WriteRequest, WriteResponse,
+        AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
+        RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
-    NodeConfig, NodeId,
+    ClusterConfig, NodeId,
 };
 
 #[derive(Debug)]
@@ -47,37 +51,55 @@ pub enum ResponseMessage {
     ReadResult(mpsc::Receiver<ResponseMessage>),
 }
 
-impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
-    pub fn run(config: NodeConfig<Client>, state_machine: SM, logger: Logger) -> NodeClient {
+impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
+    pub fn run(
+        id: NodeId,
+        config: ClusterConfig,
+        state_machine: SM,
+        logger: Logger,
+        external_client: Client,
+    ) -> InternalNodeClient {
         let (tx, rx) = mpsc::sync_channel(32);
 
-        let client = NodeClient::new(tx);
-        let self_client = client.clone();
+        let internal_client = InternalNodeClient::new(tx);
+        let _internal_client = internal_client.clone();
         let state_machine = state_machine.clone();
 
         std::thread::spawn(move || {
-            let node = Node::new(config, state_machine, logger, rx, self_client);
+            let node = Node::new(
+                id,
+                config,
+                state_machine,
+                logger,
+                external_client,
+                internal_client,
+                rx,
+            );
             node._run();
         });
-        client
+        _internal_client
     }
 
     fn new(
-        config: NodeConfig<Client>,
+        id: NodeId,
+        config: ClusterConfig,
         state_machine: SM,
         logger: Logger,
+        external_client: Client,
+        internal_client: InternalNodeClient,
         receiver: mpsc::Receiver<Request>,
-        self_client: NodeClient,
     ) -> Node<SM, Client> {
         let election_timeout = config.election_timeout.clone();
         Node {
+            id,
             config,
-            election_timer: ElectionTimer::new(election_timeout),
-            logger,
-            receiver,
-            self_client,
-            state: NodeState::new(),
             state_machine,
+            logger,
+            external_client,
+            internal_client,
+            receiver,
+            state: NodeState::new(),
+            election_timer: ElectionTimer::new(election_timeout),
         }
     }
 
@@ -86,7 +108,7 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
         self.election_timer.reset();
 
         // heartbeat
-        let heartbeat_sender = self.self_client.clone();
+        let heartbeat_sender = self.internal_client.clone();
         std::thread::spawn(move || loop {
             heartbeat_sender.clone().send(RequestMessage::Heartbeat);
             sleep(Duration::from_millis(self.config.heartbeat_period));

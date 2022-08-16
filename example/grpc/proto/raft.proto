@@ -42,7 +42,6 @@ message WriteResponse {
     optional string message = 1;
     optional bool success = 2;
     optional string leader_id = 3;
-    optional string leader_address = 4;
 }
 
 message ReadRequest {
@@ -53,7 +52,6 @@ message ReadResponse {
     optional string message = 1;
     optional bool success = 2;
     optional string leader_id = 3;
-    optional string leader_address = 4;
 }
 
 service Raft {

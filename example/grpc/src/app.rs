@@ -8,10 +8,10 @@ use crate::grpc::{
     AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
     RequestVoteResponse, WriteRequest, WriteResponse,
 };
-use straft::NodeClient;
+use straft::InternalNodeClient;
 
 pub struct App {
-    pub client: NodeClient,
+    pub client: InternalNodeClient,
     pub addr: std::net::SocketAddr,
 }
 

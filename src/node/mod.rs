@@ -9,7 +9,7 @@ mod state;
 
 use self::{
     actor::{Request, RequestMessage},
-    client::NodeClient,
+    client::{ExternalNodeClient, InternalNodeClient},
     election_timer::ElectionTimer,
     logger::Logger,
     state::{NodeState, Role},
@@ -17,24 +17,31 @@ use self::{
 
 use crate::{
     rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, RPCClient, ReadRequest, ReadResponse,
-        RequestVoteRequest, RequestVoteResponse, WriteRequest, WriteResponse,
+        AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
+        RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
-    Entry, NodeConfig, NodeId, ResponseMessage,
+    ClusterConfig, Entry, NodeId, ResponseMessage,
 };
 
-pub struct Node<SM: StateMachineClient, Client: RPCClient> {
-    config: NodeConfig<Client>,
-    election_timer: ElectionTimer,
-    logger: Logger,
-    receiver: mpsc::Receiver<Request>,
-    self_client: NodeClient,
-    state: NodeState,
+pub struct Node<SM: StateMachineClient, Client: ExternalNodeClient> {
+    id: NodeId,
+    config: ClusterConfig,
     state_machine: SM,
+    logger: Logger,
+    // client to send request to other nodes
+    external_client: Client,
+    // client to send request to self
+    internal_client: InternalNodeClient,
+    // receive requests
+    receiver: mpsc::Receiver<Request>,
+    // raft state, not state machine state
+    state: NodeState,
+    // about election time
+    election_timer: ElectionTimer,
 }
 
-impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
+impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     fn handle_append_entries(&mut self, req: AppendEntriesRequest) -> AppendEntriesResponse {
         self.election_timer.reset();
         if req.term > self.state.current_term && !self.state.is_role(Role::FOLLOWER) {
@@ -112,7 +119,6 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                     message,
                     success,
                     leader_id: None,
-                    leader_address: None,
                 }))
                 .ok();
             });
@@ -121,7 +127,6 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                 message: format!("Retry to leader"),
                 success: false,
                 leader_id: self.state.leader_id.clone(),
-                leader_address: self.state.leader_address.clone(),
             }))
             .ok();
         }
@@ -141,7 +146,6 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                 message,
                 success,
                 leader_id: None,
-                leader_address: None,
             }))
             .ok();
         });
@@ -154,9 +158,8 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
         } else if self.state.is_role(Role::LEADER) {
             self.request_append_entries();
         }
-        self.log_debug(format!("com {} last {}", self.state.commit_index, self.state.last_applied));
         if self.state.commit_index > self.state.last_applied {
-            for i in self.state.last_applied+1..=self.state.commit_index {
+            for i in self.state.last_applied + 1..=self.state.commit_index {
                 self.execute(i);
             }
             self.state.last_applied = self.state.commit_index;
@@ -253,14 +256,7 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                 self.run_for_leader();
             }
             Role::LEADER => {
-                self.state.initialize_leader_state(
-                    self.config.id.clone(),
-                    self.config
-                        .addresses
-                        .get(&self.config.id.clone())
-                        .expect(&format!("Failed to get address of id {}", self.config.id))
-                        .clone(),
-                );
+                self.state.initialize_leader_state(self.id.clone());
                 self.request_append_entries();
             }
             _ => {}
@@ -272,24 +268,27 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
         self.log_debug(format!("Run for leader in term {:?}", candidate_term));
         self.election_timer.reset();
         self.state.current_term = candidate_term;
-        self.state.voted_for = Some(self.config.id.clone());
+        self.state.voted_for = Some(self.id.clone());
 
         let last_log = self.state.last_log();
         let msg = RequestVoteRequest {
             term: candidate_term,
-            candidate_id: self.config.id.clone(),
+            candidate_id: self.id.clone(),
             last_log_index: last_log.index,
             last_log_term: last_log.term,
         };
-        for (follower_id, client) in self.config.client.iter() {
+        for follower_id in self.config.members.iter() {
+            if follower_id == &self.id {
+                continue;
+            }
             let msg = msg.clone();
             let follower_id = follower_id.clone();
-            let mut client = client.clone();
-            let self_client = self.self_client.clone();
+            let mut external_client = self.external_client.clone();
+            let internal_client = self.internal_client.clone();
             std::thread::spawn(move || {
-                let res = client.request_vote(msg);
+                let res = external_client.request_vote(follower_id.clone(), msg);
                 if let Ok(res) = res {
-                    self_client.send(RequestMessage::RequestVoteResult(
+                    internal_client.send(RequestMessage::RequestVoteResult(
                         candidate_term,
                         follower_id,
                         res,
@@ -302,7 +301,10 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
     fn request_append_entries(&mut self) {
         let leader_term = self.state.current_term;
         let last_log_index = self.state.last_log().index;
-        for (follower_id, client) in self.config.client.iter() {
+        for follower_id in self.config.members.iter() {
+            if follower_id == &self.id {
+                continue;
+            }
             let next_index = *self
                 .state
                 .next_index
@@ -313,21 +315,21 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
             let entries = self.state.log_range_from(next_index..).to_vec();
             let msg = AppendEntriesRequest {
                 term: self.state.current_term,
-                leader_id: self.config.id.clone(),
+                leader_id: self.id.clone(),
                 prev_log_index,
                 prev_log_term,
                 entries,
                 leader_commit: self.state.commit_index,
             };
             let follower_id = follower_id.clone();
-            let mut client = client.clone();
-            let self_client = self.self_client.clone();
+            let mut external_client = self.external_client.clone();
+            let internal_client = self.internal_client.clone();
             std::thread::spawn(move || {
-                let res = client.append_entries(msg);
+                let res = external_client.append_entries(follower_id.clone(), msg);
                 if let Ok(res) = res {
-                    self_client.send(RequestMessage::AppendEntriesResult(
+                    internal_client.send(RequestMessage::AppendEntriesResult(
                         leader_term,
-                        follower_id.clone(),
+                        follower_id,
                         last_log_index,
                         res,
                     ));
@@ -338,17 +340,9 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
 
     fn detect_no_leader(&mut self) {
         self.state.leader_id = None;
-        self.state.leader_address = None;
     }
 
     fn detect_other_leader(&mut self, leader_id: String) {
-        self.state.leader_address = Some(
-            self.config
-                .addresses
-                .get(&leader_id)
-                .expect(&format!("Failed to get address of id {}", leader_id))
-                .clone(),
-        );
         self.state.leader_id = Some(leader_id);
     }
 }

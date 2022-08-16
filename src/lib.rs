@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate slog;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -12,18 +12,15 @@ pub mod state_machine;
 pub use node::logger::Logger;
 pub use node::{
     actor::{RequestMessage, ResponseMessage},
-    client::NodeClient,
+    client::{InternalNodeClient, ExternalNodeClient},
     Node,
 };
-pub use rpc::{RPCClient, RPC};
 pub use state_machine::StateMachineClient;
 
 pub type NodeId = String;
 
-pub struct NodeConfig<Client: RPCClient> {
-    pub id: NodeId,
-    pub addresses: HashMap<NodeId, String>,
-    pub client: HashMap<NodeId, Client>,
+pub struct ClusterConfig {
+    pub members: HashSet<NodeId>,
     pub election_timeout: Range<u64>,
     pub heartbeat_period: u64,
     pub majority: u64,
