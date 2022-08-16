@@ -30,5 +30,12 @@ pub struct ClusterConfig {
 pub struct Entry {
     pub index: usize,
     pub term: u64,
-    pub command: String,
+    pub command: Command,
+}
+
+#[derive(Debug, Clone)]
+pub enum Command {
+    Empty,
+    Write(String),
+    ChangeMembership(HashSet<NodeId>, HashSet<NodeId>),
 }

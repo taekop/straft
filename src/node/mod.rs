@@ -21,7 +21,7 @@ use crate::{
         RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
-    ClusterConfig, Entry, NodeId, ResponseMessage,
+    ClusterConfig, Command, Entry, NodeId, ResponseMessage,
 };
 
 pub struct Node<SM: StateMachineClient, Client: ExternalNodeClient> {
@@ -105,7 +105,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             let new_entry = Entry {
                 index: last_log.index + 1,
                 term: self.state.current_term,
-                command: req.command,
+                command: Command::Write(req.command),
             };
             self.state.push_log(new_entry, Some(tx2));
             std::thread::spawn(move || {
@@ -236,13 +236,14 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     }
 
     fn execute(&self, ind: usize) {
-        let entry = self.state.log(ind);
-        self.log_debug(format!("Execute: {:?}", entry.command));
-        let res = self.state_machine.write(entry.command.clone());
-
-        let tx = self.state.write_responser(ind).clone();
-        if let Some(sender) = tx {
-            sender.send(res).ok();
+        let command = self.state.log(ind).command.clone();
+        self.log_debug(format!("Execute: {:?}", command));
+        if let Command::Write(command) = command {
+            let res = self.state_machine.write(command);
+            let tx = self.state.write_responser(ind).clone();
+            if let Some(sender) = tx {
+                sender.send(res).ok();
+            }
         }
     }
 

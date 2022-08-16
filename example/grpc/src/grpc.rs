@@ -1,24 +1,47 @@
 // gRPC module
 // Implement conversions between RPC and gRPC
 
+use std::collections::HashSet;
+
 tonic::include_proto!("raft");
 
 impl Into<straft::Entry> for Entry {
     fn into(self) -> straft::Entry {
+        let command: straft::Command = match self.command.unwrap() {
+            entry::Command::Empty(Empty {}) => straft::Command::Empty,
+            entry::Command::Write(command) => straft::Command::Write(command),
+            entry::Command::ChangeMembership(ChangeMembership {
+                old_members,
+                new_members,
+            }) => straft::Command::ChangeMembership(
+                HashSet::from_iter(old_members.into_iter()),
+                HashSet::from_iter(new_members.into_iter()),
+            ),
+        };
         straft::Entry {
             index: self.index.unwrap() as usize,
             term: self.term.unwrap(),
-            command: self.command.unwrap(),
+            command,
         }
     }
 }
 
 impl From<straft::Entry> for Entry {
     fn from(entry: straft::Entry) -> Entry {
+        let command = Some(match entry.command {
+            straft::Command::Empty => entry::Command::Empty(Empty {}),
+            straft::Command::Write(command) => entry::Command::Write(command),
+            straft::Command::ChangeMembership(old_members, new_members) => {
+                entry::Command::ChangeMembership(ChangeMembership {
+                    old_members: Vec::from_iter(old_members),
+                    new_members: Vec::from_iter(new_members),
+                })
+            }
+        });
         Entry {
             index: Some(entry.index as u64),
             term: Some(entry.term),
-            command: Some(entry.command),
+            command,
         }
     }
 }

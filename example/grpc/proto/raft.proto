@@ -5,7 +5,18 @@ package raft;
 message Entry {
   optional uint64 index = 1;
   optional uint64 term = 2;
-  optional string command = 3;
+  oneof command {
+    Empty empty = 3;
+    string write = 4;
+    ChangeMembership change_membership = 5;
+  }
+}
+
+message Empty {}
+
+message ChangeMembership {
+    repeated string old_members = 1;
+    repeated string new_members = 2;
 }
 
 message AppendEntriesRequest {

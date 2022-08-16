@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::{collections::HashMap, ops::RangeFrom, sync::mpsc::SyncSender};
 
-use crate::{Entry, NodeId};
+use crate::{Command, Entry, NodeId};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Role {
@@ -40,7 +40,7 @@ impl NodeState {
             log: vec![Entry {
                 index: 0,
                 term: 0,
-                command: String::default(),
+                command: Command::Empty,
             }],
             commit_index: 0,
             last_applied: 0,
