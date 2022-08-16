@@ -44,7 +44,6 @@ pub struct RequestVoteResponse {
 #[derive(Debug, Clone)]
 pub struct WriteRequest {
     pub command: String,
-    pub uid: u64,
 }
 
 #[derive(Debug, Clone)]

@@ -83,6 +83,7 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
 
     fn _run(mut self) {
         self.log_info(format!("Running..."));
+        self.election_timer.reset();
 
         // heartbeat
         let heartbeat_sender = self.self_client.clone();

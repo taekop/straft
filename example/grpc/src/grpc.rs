@@ -9,7 +9,6 @@ impl Into<straft::Entry> for Entry {
             index: self.index.unwrap() as usize,
             term: self.term.unwrap(),
             command: self.command.unwrap(),
-            sender: None,
         }
     }
 }
@@ -112,7 +111,6 @@ impl Into<straft::rpc::WriteRequest> for WriteRequest {
     fn into(self) -> straft::rpc::WriteRequest {
         straft::rpc::WriteRequest {
             command: self.command.unwrap(),
-            uid: self.uid.unwrap(),
         }
     }
 }
@@ -121,7 +119,6 @@ impl From<straft::rpc::WriteRequest> for WriteRequest {
     fn from(req: straft::rpc::WriteRequest) -> WriteRequest {
         WriteRequest {
             command: Some(req.command),
-            uid: Some(req.uid),
         }
     }
 }

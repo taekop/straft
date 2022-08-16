@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use anyhow::Result;
+use std::{collections::HashMap, ops::RangeFrom, sync::mpsc::SyncSender};
 
 use crate::{Entry, NodeId};
 
@@ -15,7 +16,7 @@ pub struct NodeState {
     // persistent
     pub current_term: u64,
     pub voted_for: Option<NodeId>,
-    pub log: Vec<Entry>,
+    log: Vec<Entry>,
     // volatile
     pub commit_index: usize,
     pub last_applied: usize,
@@ -28,6 +29,7 @@ pub struct NodeState {
     // extra
     pub leader_id: Option<NodeId>,
     pub leader_address: Option<String>,
+    write_responser: Vec<Option<SyncSender<Result<String>>>>,
 }
 
 impl NodeState {
@@ -40,7 +42,6 @@ impl NodeState {
                 index: 0,
                 term: 0,
                 command: String::default(),
-                sender: None,
             }],
             commit_index: 0,
             last_applied: 0,
@@ -50,6 +51,7 @@ impl NodeState {
             match_index: HashMap::new(),
             leader_id: None,
             leader_address: None,
+            write_responser: vec![None],
         }
     }
 
@@ -73,7 +75,30 @@ impl NodeState {
         self.role = _role;
     }
 
+    pub fn push_log(&mut self, entry: Entry, sender: Option<SyncSender<Result<String>>>) {
+        self.log.push(entry);
+        self.write_responser.push(sender);
+    }
+
+    pub fn splice_log(&mut self, from: usize, entries: Vec<Entry>) {
+        self.write_responser
+            .splice(from.., vec![None; entries.len()]);
+        self.log.splice(from.., entries);
+    }
+
+    pub fn log(&self, ind: usize) -> &Entry {
+        &self.log[ind]
+    }
+
+    pub fn log_range_from(&self, range: RangeFrom<usize>) -> &[Entry] {
+        &self.log[range]
+    }
+
     pub fn last_log(&self) -> &Entry {
         self.log.last().unwrap()
+    }
+
+    pub fn write_responser(&self, ind: usize) -> &Option<SyncSender<Result<String>>> {
+        &self.write_responser[ind]
     }
 }

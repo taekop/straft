@@ -47,7 +47,7 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
             self.state.current_term = req.term;
             self.detect_other_leader(req.leader_id);
 
-            self.state.log.splice(req.prev_log_index + 1.., req.entries);
+            self.state.splice_log(req.prev_log_index + 1, req.entries);
 
             if req.leader_commit > self.state.commit_index {
                 self.state.commit_index = min(req.leader_commit, self.state.last_log().index);
@@ -99,9 +99,8 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                 index: last_log.index + 1,
                 term: self.state.current_term,
                 command: req.command,
-                sender: Some(tx2),
             };
-            self.state.log.push(new_entry);
+            self.state.push_log(new_entry, Some(tx2));
             std::thread::spawn(move || {
                 let (message, success) = match rx2.recv() {
                     Ok(Ok(message)) => (message, true),
@@ -155,13 +154,10 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
         } else if self.state.is_role(Role::LEADER) {
             self.request_append_entries();
         }
-
+        self.log_debug(format!("com {} last {}", self.state.commit_index, self.state.last_applied));
         if self.state.commit_index > self.state.last_applied {
-            for entry in
-                self.state.log[self.state.last_applied + 1..=self.state.commit_index].iter()
-            {
-                self.log_debug(format!("Execute: {:?}", entry.command));
-                self.apply(entry.clone());
+            for i in self.state.last_applied+1..=self.state.commit_index {
+                self.execute(i);
             }
             self.state.last_applied = self.state.commit_index;
         }
@@ -236,9 +232,12 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
         ResponseMessage::RequestVoteResult
     }
 
-    fn apply(&self, entry: Entry) {
-        let (tx, command) = (entry.sender, entry.command);
-        let res = self.state_machine.write(command);
+    fn execute(&self, ind: usize) {
+        let entry = self.state.log(ind);
+        self.log_debug(format!("Execute: {:?}", entry.command));
+        let res = self.state_machine.write(entry.command.clone());
+
+        let tx = self.state.write_responser(ind).clone();
         if let Some(sender) = tx {
             sender.send(res).ok();
         }
@@ -310,8 +309,8 @@ impl<SM: StateMachineClient, Client: RPCClient> Node<SM, Client> {
                 .entry(follower_id.clone())
                 .or_insert(last_log_index + 1);
             let prev_log_index = next_index - 1;
-            let prev_log_term = self.state.log.get(prev_log_index).unwrap().term;
-            let entries = self.state.log[next_index..].to_vec();
+            let prev_log_term = self.state.log(prev_log_index).term;
+            let entries = self.state.log_range_from(next_index..).to_vec();
             let msg = AppendEntriesRequest {
                 term: self.state.current_term,
                 leader_id: self.config.id.clone(),

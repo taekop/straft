@@ -1,11 +1,9 @@
 #[macro_use]
 extern crate slog;
 
-use anyhow::Result;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
-use std::sync::mpsc::SyncSender;
 
 pub mod node;
 pub mod rpc;
@@ -36,6 +34,4 @@ pub struct Entry {
     pub index: usize,
     pub term: u64,
     pub command: String,
-    // send response when applied to state machine
-    pub sender: Option<SyncSender<Result<String>>>,
 }

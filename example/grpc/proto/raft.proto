@@ -36,7 +36,6 @@ message RequestVoteResponse {
 
 message WriteRequest {
     optional string command = 1;
-    optional uint64 uid = 2;
 }
 
 message WriteResponse {

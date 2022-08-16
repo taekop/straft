@@ -1,23 +1,13 @@
 use raft_client::RaftClient;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
 use tonic::transport::Channel;
 
 tonic::include_proto!("raft");
-
-fn hash<T: Hash>(a: T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    a.hash(&mut hasher);
-    hasher.finish()
-}
-
 async fn write(
     client: &mut RaftClient<Channel>,
     command: String,
 ) -> Result<tonic::Response<WriteResponse>, Box<dyn std::error::Error>> {
     let request = tonic::Request::new(WriteRequest {
-        uid: Some(hash(&command)),
         command: Some(command),
     });
     let response = client.write(request).await?;
