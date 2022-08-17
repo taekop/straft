@@ -25,7 +25,7 @@ fn get_number() -> usize {
     n
 }
 
-fn get_config(num: usize) -> (String, String, ClusterConfig, MyClient) {
+fn get_config(num: usize) -> (String, String, HashSet<String>, ClusterConfig, MyClient) {
     let ids = vec![
         // initial config
         String::from("alpha"),
@@ -44,17 +44,19 @@ fn get_config(num: usize) -> (String, String, ClusterConfig, MyClient) {
         String::from("http://[::1]:50053"),
         String::from("http://[::1]:50054"),
     ];
-    let full_id_addr: HashMap<String, String> = ids.iter().cloned().zip(addrs.iter().cloned()).collect();
+    let full_id_addr: HashMap<String, String> =
+        ids.iter().cloned().zip(addrs.iter().cloned()).collect();
     let external_client = MyClient::new(full_id_addr);
 
     let id = ids[num].clone();
     let addr = addrs[num].clone();
+    let members = HashSet::from_iter(ids[0..=2].iter().cloned());
     let config = ClusterConfig {
-        members: HashSet::from_iter(ids[0..=2].iter().cloned()),
-        election_timeout: 1000..2000,
+        minimum_election_timeout: 1000,
+        maximum_election_timeout: 2000,
         heartbeat_period: 200,
     };
-    (id, addr, config, external_client)
+    (id, addr, members, config, external_client)
 }
 
 fn get_state_machine(id: &str) -> MyStateMachineClient {
@@ -83,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print!("Node number (0~4): ");
     io::stdout().flush().expect("Failed to flush");
     let node_number = get_number();
-    let (id, addr, config, external_client) = get_config(node_number);
+    let (id, addr, members, config, external_client) = get_config(node_number);
 
     let state_machine_client = get_state_machine(&id);
 
@@ -91,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Node::<MyStateMachineClient, MyClient>::run(
         id,
+        members,
         config,
         state_machine_client,
         logger,

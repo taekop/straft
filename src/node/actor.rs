@@ -1,6 +1,6 @@
-use std::sync::mpsc;
 use std::thread::sleep;
 use std::time::Duration;
+use std::{collections::HashSet, sync::mpsc};
 
 use crate::{
     node::{
@@ -57,6 +57,7 @@ pub enum ResponseMessage {
 impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     pub fn run(
         id: NodeId,
+        members: HashSet<NodeId>,
         config: ClusterConfig,
         state_machine: SM,
         logger: Logger,
@@ -71,6 +72,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         std::thread::spawn(move || {
             let node = Node::new(
                 id,
+                members,
                 config,
                 state_machine,
                 logger,
@@ -85,6 +87,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
 
     fn new(
         id: NodeId,
+        members: HashSet<NodeId>,
         config: ClusterConfig,
         state_machine: SM,
         logger: Logger,
@@ -92,24 +95,25 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         internal_client: InternalNodeClient,
         receiver: mpsc::Receiver<Request>,
     ) -> Node<SM, Client> {
-        let election_timeout = config.election_timeout.clone();
+        let minimum_election_timeout = config.minimum_election_timeout;
+        let maximum_election_timeout = config.maximum_election_timeout;
         Node {
-            id,
+            id: id.clone(),
             config,
             state_machine,
             logger,
             external_client,
             internal_client,
             receiver,
-            state: NodeState::new(),
-            election_timer: ElectionTimer::new(election_timeout),
+            state: NodeState::new(id, members),
+            election_timer: ElectionTimer::new(minimum_election_timeout, maximum_election_timeout),
             running: true,
         }
     }
 
     fn _run(mut self) {
         self.log_info(format!("Running..."));
-        self.election_timer.reset();
+        self.election_timer.reset(false);
 
         // heartbeat
         let heartbeat_sender = self.internal_client.clone();

@@ -34,7 +34,8 @@ pub struct RequestVoteResponse {
 
 #[derive(Debug, Clone)]
 pub struct ChangeMembershipRequest {
-    pub members: HashSet<NodeId>,
+    pub new_members: Option<HashSet<NodeId>>,
+    pub non_voting_members: Option<HashSet<NodeId>>,
 }
 
 #[derive(Debug, Clone)]

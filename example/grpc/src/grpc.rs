@@ -10,8 +10,23 @@ impl Into<straft::Entry> for Entry {
         let command: straft::Command = match self.command.unwrap() {
             entry::Command::Empty(Empty {}) => straft::Command::Empty,
             entry::Command::Write(command) => straft::Command::Write(command),
-            entry::Command::ChangeMembership(ChangeMembership { members }) => {
-                straft::Command::ChangeMembership(HashSet::from_iter(members.into_iter()))
+            entry::Command::ChangeMembership(ChangeMembership {
+                change_new_members,
+                new_members,
+                change_non_voting_members,
+                non_voting_members,
+            }) => {
+                let new_members = if change_new_members.unwrap() {
+                    Some(HashSet::from_iter(new_members.into_iter()))
+                } else {
+                    None
+                };
+                let non_voting_members = if change_non_voting_members.unwrap() {
+                    Some(HashSet::from_iter(non_voting_members.into_iter()))
+                } else {
+                    None
+                };
+                straft::Command::ChangeMembership(new_members, non_voting_members)
             }
         };
         straft::Entry {
@@ -27,9 +42,12 @@ impl From<straft::Entry> for Entry {
         let command = Some(match entry.command {
             straft::Command::Empty => entry::Command::Empty(Empty {}),
             straft::Command::Write(command) => entry::Command::Write(command),
-            straft::Command::ChangeMembership(members) => {
+            straft::Command::ChangeMembership(new_members, non_voting_members) => {
                 entry::Command::ChangeMembership(ChangeMembership {
-                    members: Vec::from_iter(members),
+                    change_new_members: Some(new_members.is_some()),
+                    new_members: Vec::from_iter(new_members.unwrap_or_default()),
+                    change_non_voting_members: Some(non_voting_members.is_some()),
+                    non_voting_members: Vec::from_iter(non_voting_members.unwrap_or_default()),
                 })
             }
         });
@@ -127,8 +145,19 @@ impl From<straft::rpc::RequestVoteResponse> for RequestVoteResponse {
 
 impl Into<straft::rpc::ChangeMembershipRequest> for ChangeMembershipRequest {
     fn into(self) -> straft::rpc::ChangeMembershipRequest {
+        let new_members = if self.change_new_members.unwrap() {
+            Some(HashSet::from_iter(self.new_members.into_iter()))
+        } else {
+            None
+        };
+        let non_voting_members = if self.change_non_voting_members.unwrap() {
+            Some(HashSet::from_iter(self.non_voting_members.into_iter()))
+        } else {
+            None
+        };
         straft::rpc::ChangeMembershipRequest {
-            members: HashSet::from_iter(self.members.into_iter()),
+            new_members,
+            non_voting_members,
         }
     }
 }
@@ -136,7 +165,14 @@ impl Into<straft::rpc::ChangeMembershipRequest> for ChangeMembershipRequest {
 impl From<straft::rpc::ChangeMembershipRequest> for ChangeMembershipRequest {
     fn from(req: straft::rpc::ChangeMembershipRequest) -> ChangeMembershipRequest {
         ChangeMembershipRequest {
-            members: req.members.into_iter().collect(),
+            change_new_members: Some(req.new_members.is_some()),
+            new_members: req.new_members.unwrap_or_default().into_iter().collect(),
+            change_non_voting_members: Some(req.non_voting_members.is_some()),
+            non_voting_members: req
+                .non_voting_members
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
         }
     }
 }

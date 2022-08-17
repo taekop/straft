@@ -1,40 +1,47 @@
 use rand::{thread_rng, Rng};
-use std::ops::Range;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // time values as millis, u64
 pub struct ElectionTimer {
-    election_timeout: Range<u64>,
-    heartbeat_time: u64,
+    minimum_election_timeout: u64,
+    maximum_election_timeout: u64,
+    last_timestamp: u64,
+    last_current_leader_timestamp: u64,
     next_election_timeout: u64,
 }
 
 impl ElectionTimer {
-    pub fn new(election_timeout: Range<u64>) -> ElectionTimer {
+    pub fn new(minimum_election_timeout: u64, maximum_election_timeout: u64) -> ElectionTimer {
         ElectionTimer {
-            heartbeat_time: 0,
-            election_timeout: election_timeout,
+            minimum_election_timeout,
+            maximum_election_timeout,
+            last_timestamp: 0,
+            last_current_leader_timestamp: 0,
             next_election_timeout: 0,
         }
     }
 
-    pub fn reset(&mut self) {
+    // Check whether request is from current leader
+    pub fn reset(&mut self, current_leader: bool) {
         let now = ElectionTimer::now();
-        self.heartbeat_time = now;
-        self.next_election_timeout = thread_rng().gen_range(self.election_timeout.clone());
+        self.last_timestamp = now;
+        if current_leader {
+            self.last_current_leader_timestamp = now;
+        }
+        self.next_election_timeout =
+            thread_rng().gen_range(self.minimum_election_timeout..self.maximum_election_timeout);
     }
 
+    // Ready to run for leader
     pub fn is_timeout(&self) -> bool {
         let now = ElectionTimer::now();
-        now > self.heartbeat_time + self.next_election_timeout
+        now > self.last_timestamp + self.next_election_timeout
     }
 
-    // half timeout to prevent leader switching due to delayed response
-    pub fn _until_next_election(&self) -> u64 {
+    // Check the possibility of current leader crash
+    pub fn is_current_leader_timeout(&self) -> bool {
         let now = ElectionTimer::now();
-        (self.heartbeat_time + self.next_election_timeout / 2)
-            .checked_sub(now)
-            .unwrap_or(0)
+        now > self.last_current_leader_timestamp + self.minimum_election_timeout
     }
 
     fn now() -> u64 {

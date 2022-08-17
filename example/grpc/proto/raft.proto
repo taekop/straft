@@ -15,7 +15,10 @@ message Entry {
 message Empty {}
 
 message ChangeMembership {
-    repeated string members = 1;
+    optional bool change_new_members = 1;
+    repeated string new_members = 2;
+    optional bool change_non_voting_members = 3;
+    repeated string non_voting_members = 4;
 }
 
 message AppendEntriesRequest {
@@ -45,7 +48,10 @@ message RequestVoteResponse {
 }
 
 message ChangeMembershipRequest {
-    repeated string members = 1;
+    optional bool change_new_members = 1;
+    repeated string new_members = 2;
+    optional bool change_non_voting_members = 3;
+    repeated string non_voting_members = 4;
 }
 
 message ChangeMembershipResponse {
