@@ -5,8 +5,9 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use crate::grpc::{
     raft_server::{Raft, RaftServer},
-    AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
-    RequestVoteResponse, WriteRequest, WriteResponse,
+    AppendEntriesRequest, AppendEntriesResponse, ChangeMembershipRequest, ChangeMembershipResponse,
+    ReadRequest, ReadResponse, RequestVoteRequest, RequestVoteResponse, WriteRequest,
+    WriteResponse,
 };
 use straft::InternalNodeClient;
 
@@ -52,6 +53,19 @@ impl Raft for App {
         let response = client.send(request);
         match response {
             straft::ResponseMessage::RequestVote(response) => Ok(Response::new(response.into())),
+            _ => Err(Status::internal("Invalid response type")),
+        }
+    }
+
+    async fn change_membership(
+        &self,
+        request: Request<ChangeMembershipRequest>,
+    ) -> Result<Response<ChangeMembershipResponse>, Status> {
+        let client = self.client.clone();
+        let request = straft::RequestMessage::ChangeMembership(request.into_inner().into());
+        let response = client.send(request);
+        match response {
+            straft::ResponseMessage::ChangeMembership(response) => Ok(Response::new(response.into())),
             _ => Err(Status::internal("Invalid response type")),
         }
     }

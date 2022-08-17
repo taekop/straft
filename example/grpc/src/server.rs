@@ -27,25 +27,32 @@ fn get_number() -> usize {
 
 fn get_config(num: usize) -> (String, String, ClusterConfig, MyClient) {
     let ids = vec![
+        // initial config
         String::from("alpha"),
         String::from("beta"),
         String::from("gamma"),
+        // config for further membership change
+        String::from("delta"),
+        String::from("epsilon"),
     ];
     let addrs = vec![
+        // initial config
         String::from("http://[::1]:50050"),
-        String::from("http://[::1]:50052"),
         String::from("http://[::1]:50051"),
+        String::from("http://[::1]:50052"),
+        // config for further membership change
+        String::from("http://[::1]:50053"),
+        String::from("http://[::1]:50054"),
     ];
-    let id_addr: HashMap<String, String> = ids.iter().cloned().zip(addrs.iter().cloned()).collect();
-    let external_client = MyClient::new(id_addr);
+    let full_id_addr: HashMap<String, String> = ids.iter().cloned().zip(addrs.iter().cloned()).collect();
+    let external_client = MyClient::new(full_id_addr);
 
     let id = ids[num].clone();
     let addr = addrs[num].clone();
     let config = ClusterConfig {
-        members: HashSet::from_iter(ids.into_iter()),
+        members: HashSet::from_iter(ids[0..=2].iter().cloned()),
         election_timeout: 1000..2000,
         heartbeat_period: 200,
-        majority: 2,
     };
     (id, addr, config, external_client)
 }
@@ -73,7 +80,7 @@ fn get_logger(id: &str, level: slog::Level) -> Logger {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print!("Node Number (0~2): ");
+    print!("Node number (0~4): ");
     io::stdout().flush().expect("Failed to flush");
     let node_number = get_number();
     let (id, addr, config, external_client) = get_config(node_number);

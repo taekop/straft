@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{Entry, NodeId};
 
 #[derive(Debug, Clone)]
@@ -28,6 +30,18 @@ pub struct RequestVoteRequest {
 pub struct RequestVoteResponse {
     pub term: u64,
     pub vote_granted: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChangeMembershipRequest {
+    pub members: HashSet<NodeId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChangeMembershipResponse {
+    pub message: String,
+    pub success: bool,
+    pub leader_id: Option<NodeId>,
 }
 
 #[derive(Debug, Clone)]

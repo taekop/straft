@@ -15,8 +15,7 @@ message Entry {
 message Empty {}
 
 message ChangeMembership {
-    repeated string old_members = 1;
-    repeated string new_members = 2;
+    repeated string members = 1;
 }
 
 message AppendEntriesRequest {
@@ -45,6 +44,16 @@ message RequestVoteResponse {
     optional bool vote_granted = 2;
 }
 
+message ChangeMembershipRequest {
+    repeated string members = 1;
+}
+
+message ChangeMembershipResponse {
+    optional string message = 1;
+    optional bool success = 2;
+    optional string leader_id = 3;
+}
+
 message WriteRequest {
     optional string command = 1;
 }
@@ -68,6 +77,7 @@ message ReadResponse {
 service Raft {
     rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse) {}
     rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
+    rpc ChangeMembership(ChangeMembershipRequest) returns(ChangeMembershipResponse) {}
     rpc Write(WriteRequest) returns(WriteResponse) {}
     rpc Read(ReadRequest) returns(ReadResponse) {}
 }

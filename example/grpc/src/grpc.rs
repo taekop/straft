@@ -10,13 +10,9 @@ impl Into<straft::Entry> for Entry {
         let command: straft::Command = match self.command.unwrap() {
             entry::Command::Empty(Empty {}) => straft::Command::Empty,
             entry::Command::Write(command) => straft::Command::Write(command),
-            entry::Command::ChangeMembership(ChangeMembership {
-                old_members,
-                new_members,
-            }) => straft::Command::ChangeMembership(
-                HashSet::from_iter(old_members.into_iter()),
-                HashSet::from_iter(new_members.into_iter()),
-            ),
+            entry::Command::ChangeMembership(ChangeMembership { members }) => {
+                straft::Command::ChangeMembership(HashSet::from_iter(members.into_iter()))
+            }
         };
         straft::Entry {
             index: self.index.unwrap() as usize,
@@ -31,10 +27,9 @@ impl From<straft::Entry> for Entry {
         let command = Some(match entry.command {
             straft::Command::Empty => entry::Command::Empty(Empty {}),
             straft::Command::Write(command) => entry::Command::Write(command),
-            straft::Command::ChangeMembership(old_members, new_members) => {
+            straft::Command::ChangeMembership(members) => {
                 entry::Command::ChangeMembership(ChangeMembership {
-                    old_members: Vec::from_iter(old_members),
-                    new_members: Vec::from_iter(new_members),
+                    members: Vec::from_iter(members),
                 })
             }
         });
@@ -126,6 +121,42 @@ impl From<straft::rpc::RequestVoteResponse> for RequestVoteResponse {
         RequestVoteResponse {
             term: Some(res.term),
             vote_granted: Some(res.vote_granted),
+        }
+    }
+}
+
+impl Into<straft::rpc::ChangeMembershipRequest> for ChangeMembershipRequest {
+    fn into(self) -> straft::rpc::ChangeMembershipRequest {
+        straft::rpc::ChangeMembershipRequest {
+            members: HashSet::from_iter(self.members.into_iter()),
+        }
+    }
+}
+
+impl From<straft::rpc::ChangeMembershipRequest> for ChangeMembershipRequest {
+    fn from(req: straft::rpc::ChangeMembershipRequest) -> ChangeMembershipRequest {
+        ChangeMembershipRequest {
+            members: req.members.into_iter().collect(),
+        }
+    }
+}
+
+impl Into<straft::rpc::ChangeMembershipResponse> for ChangeMembershipResponse {
+    fn into(self) -> straft::rpc::ChangeMembershipResponse {
+        straft::rpc::ChangeMembershipResponse {
+            message: self.message.unwrap(),
+            success: self.success.unwrap(),
+            leader_id: self.leader_id,
+        }
+    }
+}
+
+impl From<straft::rpc::ChangeMembershipResponse> for ChangeMembershipResponse {
+    fn from(res: straft::rpc::ChangeMembershipResponse) -> ChangeMembershipResponse {
+        ChangeMembershipResponse {
+            message: Some(res.message),
+            success: Some(res.success),
+            leader_id: res.leader_id,
         }
     }
 }

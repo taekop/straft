@@ -23,7 +23,6 @@ pub struct ClusterConfig {
     pub members: HashSet<NodeId>,
     pub election_timeout: Range<u64>,
     pub heartbeat_period: u64,
-    pub majority: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -37,5 +36,5 @@ pub struct Entry {
 pub enum Command {
     Empty,
     Write(String),
-    ChangeMembership(HashSet<NodeId>, HashSet<NodeId>),
+    ChangeMembership(HashSet<NodeId>),
 }

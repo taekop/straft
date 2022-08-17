@@ -3,10 +3,7 @@ use std::sync::mpsc;
 
 use crate::{
     node::actor::{Request, RequestMessage, ResponseMessage},
-    rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
-        RequestVoteResponse, WriteRequest, WriteResponse,
-    },
+    rpc::{AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse},
     NodeId,
 };
 
@@ -42,6 +39,4 @@ pub trait ExternalNodeClient: 'static + Clone + Send + Sync {
         id: NodeId,
         request: RequestVoteRequest,
     ) -> Result<RequestVoteResponse>;
-    fn write(&mut self, id: NodeId, request: WriteRequest) -> Result<WriteResponse>;
-    fn read(&mut self, id: NodeId, request: ReadRequest) -> Result<ReadResponse>;
 }

@@ -44,7 +44,7 @@ fn get_line() -> String {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print!("Node Number (0~2): ");
+    print!("Node number to send request: ");
     io::stdout().flush().expect("Failed to flush");
     let n = get_number();
     let port = n + 50050;

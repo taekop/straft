@@ -1,5 +1,5 @@
-use std::cmp::min;
 use std::sync::mpsc;
+use std::{cmp::min, collections::HashSet};
 
 pub mod actor;
 pub mod client;
@@ -17,7 +17,8 @@ use self::{
 
 use crate::{
     rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
+        AppendEntriesRequest, AppendEntriesResponse, ChangeMembershipRequest,
+        ChangeMembershipResponse, ReadRequest, ReadResponse, RequestVoteRequest,
         RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
@@ -39,6 +40,8 @@ pub struct Node<SM: StateMachineClient, Client: ExternalNodeClient> {
     state: NodeState,
     // about election time
     election_timer: ElectionTimer,
+    // shutdown actor if false
+    running: bool,
 }
 
 impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
@@ -93,6 +96,40 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             RequestVoteResponse {
                 term: self.state.current_term,
                 vote_granted: false,
+            }
+        }
+    }
+
+    fn handle_change_membership(
+        &mut self,
+        req: ChangeMembershipRequest,
+    ) -> ChangeMembershipResponse {
+        if self.state.is_role(Role::LEADER) {
+            if self.state.is_joint_consensus() {
+                ChangeMembershipResponse {
+                    message: format!("Retry after current membership change finished"),
+                    success: true,
+                    leader_id: None,
+                }
+            } else {
+                let last_log = self.state.last_log();
+                let new_entry = Entry {
+                    index: last_log.index + 1,
+                    term: self.state.current_term,
+                    command: Command::ChangeMembership(req.members),
+                };
+                self.state.push_log(new_entry, None);
+                ChangeMembershipResponse {
+                    message: format!(""),
+                    success: true,
+                    leader_id: None,
+                }
+            }
+        } else {
+            ChangeMembershipResponse {
+                message: format!("Retry to leader"),
+                success: false,
+                leader_id: self.state.leader_id.clone(),
             }
         }
     }
@@ -153,11 +190,16 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     }
 
     fn handle_heartbeat(&mut self) -> ResponseMessage {
-        if self.election_timer.is_timeout() && !self.state.is_role(Role::LEADER) {
-            self.change_role(Role::CANDIDATE);
-        } else if self.state.is_role(Role::LEADER) {
-            self.request_append_entries();
+        if self.in_cluster() {
+            if self.election_timer.is_timeout()
+                && (self.state.is_role(Role::FOLLOWER) || self.state.is_role(Role::CANDIDATE))
+            {
+                self.change_role(Role::CANDIDATE);
+            } else if self.state.is_role(Role::LEADER) {
+                self.request_append_entries();
+            }
         }
+
         if self.state.commit_index > self.state.last_applied {
             for i in self.state.last_applied + 1..=self.state.commit_index {
                 self.execute(i);
@@ -191,21 +233,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
                         *e -= 1;
                     });
                 }
-
-                let majority_match_index: usize = {
-                    let mut match_indices = self
-                        .state
-                        .match_index
-                        .values()
-                        .cloned()
-                        .chain(std::iter::once(last_log_index))
-                        .collect::<Vec<usize>>();
-                    match_indices.sort();
-                    match_indices
-                        .get((self.config.majority - 1) as usize)
-                        .unwrap_or(&0)
-                        .clone()
-                };
+                let majority_match_index = self.majority_match_index();
                 if majority_match_index > self.state.commit_index {
                     self.state.commit_index = majority_match_index;
                 }
@@ -216,7 +244,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
 
     fn handle_request_vote_result(
         &mut self,
-        _follower_id: NodeId,
+        follower_id: NodeId,
         candidate_term: u64,
         req: RequestVoteResponse,
     ) -> ResponseMessage {
@@ -226,8 +254,8 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
                 self.state.current_term = req.term;
                 self.change_role(Role::FOLLOWER);
             } else if req.vote_granted {
-                self.state.vote_cnt += 1;
-                if self.state.vote_cnt >= self.config.majority {
+                self.state.votes.insert(follower_id);
+                if self.is_majority(&self.state.votes) {
                     self.change_role(Role::LEADER);
                 }
             }
@@ -235,7 +263,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         ResponseMessage::RequestVoteResult
     }
 
-    fn execute(&self, ind: usize) {
+    fn execute(&mut self, ind: usize) {
         let command = self.state.log(ind).command.clone();
         self.log_debug(format!("Execute: {:?}", command));
         if let Command::Write(command) = command {
@@ -244,6 +272,8 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             if let Some(sender) = tx {
                 sender.send(res).ok();
             }
+        } else if let Command::ChangeMembership(_) = command {
+            self.finish_joint_consensus();
         }
     }
 
@@ -252,13 +282,16 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         self.state.change_role(role);
         match role {
             Role::CANDIDATE => {
-                self.state.initialize_candidate_state();
+                self.state.initialize_candidate_state(self.id.clone());
                 self.detect_no_leader();
                 self.run_for_leader();
             }
             Role::LEADER => {
                 self.state.initialize_leader_state(self.id.clone());
                 self.request_append_entries();
+            }
+            Role::SHUTDOWN => {
+                self.shutdown();
             }
             _ => {}
         }
@@ -302,7 +335,19 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     fn request_append_entries(&mut self) {
         let leader_term = self.state.current_term;
         let last_log_index = self.state.last_log().index;
-        for follower_id in self.config.members.iter() {
+
+        let members = if self.state.is_joint_consensus() {
+            HashSet::<String>::from_iter(
+                self.config
+                    .members
+                    .union(self.state.new_members())
+                    .into_iter()
+                    .cloned(),
+            )
+        } else {
+            self.config.members.clone()
+        };
+        for follower_id in members.iter() {
             if follower_id == &self.id {
                 continue;
             }
@@ -345,5 +390,50 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
 
     fn detect_other_leader(&mut self, leader_id: String) {
         self.state.leader_id = Some(leader_id);
+    }
+
+    fn is_majority(&self, ids: &HashSet<NodeId>) -> bool {
+        let _is_majority = |members: &HashSet<NodeId>| {
+            let majority = members.iter().count() / 2 + 1;
+            let count = members.intersection(ids).count();
+            count >= majority
+        };
+        _is_majority(&self.config.members)
+            && (!self.state.is_joint_consensus() || _is_majority(self.state.new_members()))
+    }
+
+    fn majority_match_index(&self) -> usize {
+        let _majority_match_index = |members: &HashSet<NodeId>| {
+            let majority = members.iter().count() / 2 + 1;
+            let mut match_indices: Vec<usize> = members
+                .iter()
+                .map(|id| {
+                    if id == &self.id {
+                        self.state.last_log().index
+                    } else {
+                        *self.state.match_index.get(id).unwrap_or(&0)
+                    }
+                })
+                .collect();
+            match_indices.sort();
+            match_indices.get(majority).unwrap_or(&0).clone()
+        };
+        let mut res = _majority_match_index(&self.config.members);
+        if self.state.is_joint_consensus() {
+            res = min(res, _majority_match_index(self.state.new_members()));
+        }
+        res
+    }
+
+    fn in_cluster(&self) -> bool {
+        self.config.members.contains(&self.id)
+    }
+
+    fn finish_joint_consensus(&mut self) {
+        self.config.members = self.state.new_members().clone();
+        self.state.finish_joint_consensus();
+        if !self.in_cluster() {
+            self.change_role(Role::SHUTDOWN);
+        }
     }
 }

@@ -3,13 +3,17 @@ name = "example"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]] # Bin to run the Straft gRPC server
-name = "straft-server"
+[[bin]] # Bin to run the Straft server (node)
+name = "server"
 path = "src/server.rs"
 
-[[bin]] # Bin to run the Straft gRPC client
-name = "straft-client"
+[[bin]] # Bin to run the Straft client (read/write)
+name = "client"
 path = "src/client.rs"
+
+[[bin]] # Bin to run the Straft admin (change_membership)
+name = "admin"
+path = "src/admin.rs"
 
 [dependencies]
 straft = { path = "../.." }

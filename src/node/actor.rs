@@ -11,7 +11,8 @@ use crate::{
         Node,
     },
     rpc::{
-        AppendEntriesRequest, AppendEntriesResponse, ReadRequest, ReadResponse, RequestVoteRequest,
+        AppendEntriesRequest, AppendEntriesResponse, ChangeMembershipRequest,
+        ChangeMembershipResponse, ReadRequest, ReadResponse, RequestVoteRequest,
         RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
@@ -29,6 +30,7 @@ pub enum RequestMessage {
     // rpc, called by external
     AppendEntries(AppendEntriesRequest),
     RequestVote(RequestVoteRequest),
+    ChangeMembership(ChangeMembershipRequest),
     Write(WriteRequest),
     Read(ReadRequest),
     // called by self
@@ -41,6 +43,7 @@ pub enum RequestMessage {
 pub enum ResponseMessage {
     AppendEntries(AppendEntriesResponse),
     RequestVote(RequestVoteResponse),
+    ChangeMembership(ChangeMembershipResponse),
     Write(WriteResponse),
     Read(ReadResponse),
     Heartbeat,
@@ -100,6 +103,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             receiver,
             state: NodeState::new(),
             election_timer: ElectionTimer::new(election_timeout),
+            running: true,
         }
     }
 
@@ -115,7 +119,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         });
 
         // actor
-        loop {
+        while self.running {
             let req = self.receiver.recv();
             match req {
                 Ok(req) => {
@@ -134,6 +138,9 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             }
             RequestMessage::RequestVote(msg) => {
                 ResponseMessage::RequestVote(self.handle_request_vote(msg))
+            }
+            RequestMessage::ChangeMembership(msg) => {
+                ResponseMessage::ChangeMembership(self.handle_change_membership(msg))
             }
             RequestMessage::Write(msg) => ResponseMessage::WriteResult(self.handle_write(msg)),
             RequestMessage::Read(msg) => ResponseMessage::ReadResult(self.handle_read(msg)),
@@ -159,5 +166,10 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
                 }
             };
         }
+    }
+
+    pub fn shutdown(&mut self) {
+        self.log_info(format!("Shutdown."));
+        self.running = false;
     }
 }
