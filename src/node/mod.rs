@@ -1,4 +1,8 @@
-use std::sync::mpsc;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    sync::mpsc,
+};
 
 pub mod actor;
 pub mod client;
@@ -17,8 +21,8 @@ use self::{
 use crate::{
     rpc::{
         AppendEntriesRequest, AppendEntriesResponse, ChangeMembershipRequest,
-        ChangeMembershipResponse, ReadRequest, ReadResponse, RequestVoteRequest,
-        RequestVoteResponse, WriteRequest, WriteResponse,
+        ChangeMembershipResponse, InstallSnapshotRequest, InstallSnapshotResponse, ReadRequest,
+        ReadResponse, RequestVoteRequest, RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
     ClusterConfig, Command, Entry, NodeId, ResponseMessage,
@@ -45,15 +49,19 @@ pub struct Node<SM: StateMachineClient, Client: ExternalNodeClient> {
 
 impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     fn handle_append_entries(&mut self, req: AppendEntriesRequest) -> AppendEntriesResponse {
-        self.election_timer.reset(true);
         if req.term > self.state.current_term
             && (self.state.is_role(Role::CANDIDATE) || self.state.is_role(Role::LEADER))
         {
             self.change_role(Role::FOLLOWER);
         }
 
+        let (last_log_index, last_log_term) = self.state.last_log_info();
+
         let valid_term = req.term >= self.state.current_term;
-        let valid_log_term = self.state.last_log().term == req.prev_log_term;
+        let valid_log_term = last_log_term == req.prev_log_term;
+        if valid_term {
+            self.election_timer.reset(true);
+        }
         if valid_term && valid_log_term {
             self.state.current_term = req.term;
             self.state.leader_id = Some(req.leader_id);
@@ -64,8 +72,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             }
 
             if req.leader_commit > self.state.commit_index {
-                self.state.commit_index =
-                    std::cmp::min(req.leader_commit, self.state.last_log().index);
+                self.state.commit_index = std::cmp::min(req.leader_commit, last_log_index);
             }
 
             AppendEntriesResponse {
@@ -84,7 +91,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         self.election_timer.reset(false);
         let current_term = self.state.current_term;
         let voted_for = self.state.voted_for.clone();
-        let last_log = self.state.last_log();
+        let (last_log_index, last_log_term) = self.state.last_log_info();
 
         let valid_role = !self.state.is_role(Role::NONVOTER) && !self.state.is_role(Role::SHUTDOWN);
         let valid_time = self.election_timer.is_current_leader_timeout();
@@ -92,7 +99,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         let valid_vote = req.term != current_term
             || voted_for.is_none()
             || voted_for.unwrap() == req.candidate_id;
-        let valid_log = req.last_log_index >= last_log.index && req.last_log_term >= last_log.term;
+        let valid_log = req.last_log_index >= last_log_index && req.last_log_term >= last_log_term;
         if valid_role && valid_time && valid_term && valid_vote && valid_log {
             self.state.current_term = req.term;
             self.state.voted_for = Some(req.candidate_id);
@@ -120,9 +127,9 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
                     leader_id: None,
                 }
             } else {
-                let last_log = self.state.last_log();
+                let last_log_index = self.state.last_log_info().0;
                 let new_entry = Entry {
-                    index: last_log.index + 1,
+                    index: last_log_index + 1,
                     term: self.state.current_term,
                     command: Command::ChangeMembership(req.new_members, req.non_voting_members),
                 };
@@ -147,13 +154,41 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         }
     }
 
+    fn handle_install_snapshot(&mut self, req: InstallSnapshotRequest) -> InstallSnapshotResponse {
+        let current_term = self.state.current_term;
+
+        if req.term > current_term
+            && (self.state.is_role(Role::CANDIDATE) || self.state.is_role(Role::LEADER))
+        {
+            self.state.current_term = req.term;
+            self.change_role(Role::FOLLOWER);
+        }
+
+        if req.term >= current_term {
+            self.state_machine
+                .install_snapshot(
+                    req.data,
+                    req.offset,
+                    req.done,
+                    req.last_included_index,
+                    req.last_included_term,
+                )
+                .unwrap();
+            if req.done {
+                self.state
+                    .install_snapshot(req.last_included_index, req.last_included_term);
+            }
+        }
+        InstallSnapshotResponse { term: current_term }
+    }
+
     fn handle_write(&mut self, req: WriteRequest) -> mpsc::Receiver<ResponseMessage> {
         let (tx, rx) = mpsc::sync_channel(1);
         if self.state.is_role(Role::LEADER) {
             let (tx2, rx2) = mpsc::sync_channel(1);
-            let last_log = self.state.last_log();
+            let last_log_index = self.state.last_log_info().0;
             let new_entry = Entry {
-                index: last_log.index + 1,
+                index: last_log_index + 1,
                 term: self.state.current_term,
                 command: Command::Write(req.command),
             };
@@ -209,7 +244,14 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             {
                 self.change_role(Role::CANDIDATE);
             } else if self.state.is_role(Role::LEADER) {
-                self.request_append_entries();
+                if self
+                    .state
+                    .should_save_snapshot(self.config.snapshot_threshold)
+                {
+                    self.request_install_snapshot();
+                } else {
+                    self.request_append_entries();
+                }
             }
         }
 
@@ -243,7 +285,9 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
                         .insert(follower_id.clone(), last_log_index + 1);
                 } else {
                     self.state.next_index.entry(follower_id).and_modify(|e| {
-                        *e -= 1;
+                        if *e > 0 {
+                            *e -= 1;
+                        }
                     });
                 }
                 let majority_match_index = self.state.majority_match_index();
@@ -319,12 +363,12 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         self.state.current_term = candidate_term;
         self.state.voted_for = Some(self.id.clone());
 
-        let last_log = self.state.last_log();
+        let (last_log_index, last_log_term) = self.state.last_log_info();
         let msg = RequestVoteRequest {
             term: candidate_term,
             candidate_id: self.id.clone(),
-            last_log_index: last_log.index,
-            last_log_term: last_log.term,
+            last_log_index: last_log_index,
+            last_log_term: last_log_term,
         };
         let members = self.state.members();
         for follower_id in members {
@@ -349,33 +393,42 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     }
 
     fn request_append_entries(&mut self) {
+        self.log_debug(format!("Request AppendEntries to other nodes"));
         let leader_term = self.state.current_term;
-        let last_log_index = self.state.last_log().index;
+        let last_log_index = self.state.last_log_info().0;
 
         let members = self.state.all_members();
         for follower_id in members.iter() {
             if follower_id == &self.id {
                 continue;
             }
+
+            let leader_id = self.id.clone();
+            let follower_id = follower_id.clone();
+            let mut external_client = self.external_client.clone();
+            let internal_client = self.internal_client.clone();
             let next_index = *self
                 .state
                 .next_index
                 .entry(follower_id.clone())
                 .or_insert(last_log_index + 1);
-            let prev_log_index = next_index - 1;
-            let prev_log_term = self.state.log(prev_log_index).term;
-            let entries = self.state.log_range_from(next_index..).to_vec();
+            let (prev_log_index, prev_log_term, entries) = if self.state.in_snapshot(next_index) {
+                (0, 0, Vec::new())
+            } else {
+                let (prev_log_index, prev_log_term) = self.state.log_info(next_index - 1);
+                let entries = self.state.log_range_from(next_index).to_vec();
+                (prev_log_index, prev_log_term, entries)
+            };
+
             let msg = AppendEntriesRequest {
                 term: self.state.current_term,
-                leader_id: self.id.clone(),
+                leader_id,
                 prev_log_index,
                 prev_log_term,
                 entries,
                 leader_commit: self.state.commit_index,
             };
-            let follower_id = follower_id.clone();
-            let mut external_client = self.external_client.clone();
-            let internal_client = self.internal_client.clone();
+
             std::thread::spawn(move || {
                 let res = external_client.append_entries(follower_id.clone(), msg);
                 if let Ok(res) = res {
@@ -390,6 +443,55 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         }
     }
 
+    fn request_install_snapshot(&mut self) {
+        self.log_debug(format!("Request InstallSnapshot to other nodes"));
+        let current_term = self.state.current_term;
+        let (snapshot_path, last_included_index, last_included_term) = self.save_snapshot();
+
+        let members = self.state.all_members();
+        for follower_id in members.iter() {
+            if follower_id == &self.id {
+                continue;
+            }
+            let id = self.id.clone();
+            let follower_id = follower_id.clone();
+            let snapshot_path = snapshot_path.clone();
+            let chunk_size = self.config.snapshot_chunk_size;
+            let mut external_client = self.external_client.clone();
+
+            std::thread::spawn(move || {
+                let mut offset = 0;
+                let mut reader =
+                    BufReader::with_capacity(chunk_size, File::open(snapshot_path).unwrap());
+                loop {
+                    let length = {
+                        let buffer = reader.fill_buf().unwrap();
+                        let length = buffer.len();
+                        let done = buffer.is_empty();
+                        let request = InstallSnapshotRequest {
+                            term: current_term,
+                            leader_id: id.clone(),
+                            last_included_index,
+                            last_included_term,
+                            offset,
+                            data: buffer.to_vec(),
+                            done,
+                        };
+                        external_client
+                            .install_snapshot(follower_id.clone(), request)
+                            .unwrap();
+                        length
+                    };
+                    if length == 0 {
+                        break;
+                    }
+                    reader.consume(length);
+                    offset += 1;
+                }
+            });
+        }
+    }
+
     fn finish_joint_consensus(&mut self) {
         self.state.finish_joint_consensus();
         if !self.state.in_cluster() {
@@ -399,5 +501,17 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
                 self.change_role(Role::SHUTDOWN);
             }
         }
+    }
+
+    fn save_snapshot(&mut self) -> (String, usize, u64) {
+        let (last_included_index, last_included_term) =
+            self.state.log_info(self.state.last_applied);
+        let snapshot_path = self
+            .state_machine
+            .save_snapshot(last_included_index, last_included_term)
+            .unwrap();
+        self.state
+            .save_snapshot(last_included_index, last_included_term);
+        (snapshot_path, last_included_index, last_included_term)
     }
 }

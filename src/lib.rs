@@ -19,9 +19,11 @@ pub use state_machine::StateMachineClient;
 pub type NodeId = String;
 
 pub struct ClusterConfig {
+    pub heartbeat_period: u64,
     pub minimum_election_timeout: u64,
     pub maximum_election_timeout: u64,
-    pub heartbeat_period: u64,
+    pub snapshot_threshold: usize,
+    pub snapshot_chunk_size: usize,
 }
 
 #[derive(Debug, Clone)]

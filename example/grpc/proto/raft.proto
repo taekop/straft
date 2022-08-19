@@ -60,6 +60,20 @@ message ChangeMembershipResponse {
     optional string leader_id = 3;
 }
 
+message InstallSnapshotRequest {
+    optional uint64 term = 1;
+    optional string leader_id = 2;
+    optional uint64 last_included_index = 3;
+    optional uint64 last_included_term = 4;
+    optional uint64 offset = 5;
+    optional bytes data = 6;
+    optional bool done = 7;
+}
+
+message InstallSnapshotResponse {
+    optional uint64 term = 1;
+}
+
 message WriteRequest {
     optional string command = 1;
 }
@@ -84,6 +98,7 @@ service Raft {
     rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse) {}
     rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
     rpc ChangeMembership(ChangeMembershipRequest) returns(ChangeMembershipResponse) {}
+    rpc InstallSnapshot(InstallSnapshotRequest) returns(InstallSnapshotResponse) {}
     rpc Write(WriteRequest) returns(WriteResponse) {}
     rpc Read(ReadRequest) returns(ReadResponse) {}
 }

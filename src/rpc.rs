@@ -46,6 +46,22 @@ pub struct ChangeMembershipResponse {
 }
 
 #[derive(Debug, Clone)]
+pub struct InstallSnapshotRequest {
+    pub term: u64,
+    pub leader_id: NodeId,
+    pub last_included_index: usize,
+    pub last_included_term: u64,
+    pub offset: usize,
+    pub data: Vec<u8>,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstallSnapshotResponse {
+    pub term: u64,
+}
+
+#[derive(Debug, Clone)]
 pub struct WriteRequest {
     pub command: String,
 }

@@ -197,6 +197,50 @@ impl From<straft::rpc::ChangeMembershipResponse> for ChangeMembershipResponse {
     }
 }
 
+impl Into<straft::rpc::InstallSnapshotRequest> for InstallSnapshotRequest {
+    fn into(self) -> straft::rpc::InstallSnapshotRequest {
+        straft::rpc::InstallSnapshotRequest {
+            term: self.term.unwrap(),
+            leader_id: self.leader_id.unwrap(),
+            last_included_index: self.last_included_index.unwrap() as usize,
+            last_included_term: self.last_included_term.unwrap(),
+            offset: self.offset.unwrap() as usize,
+            data: self.data.unwrap(),
+            done: self.done.unwrap(),
+        }
+    }
+}
+
+impl From<straft::rpc::InstallSnapshotRequest> for InstallSnapshotRequest {
+    fn from(req: straft::rpc::InstallSnapshotRequest) -> InstallSnapshotRequest {
+        InstallSnapshotRequest {
+            term: Some(req.term),
+            leader_id: Some(req.leader_id),
+            last_included_index: Some(req.last_included_index as u64),
+            last_included_term: Some(req.last_included_term),
+            offset: Some(req.offset as u64),
+            data: Some(req.data),
+            done: Some(req.done),
+        }
+    }
+}
+
+impl Into<straft::rpc::InstallSnapshotResponse> for InstallSnapshotResponse {
+    fn into(self) -> straft::rpc::InstallSnapshotResponse {
+        straft::rpc::InstallSnapshotResponse {
+            term: self.term.unwrap(),
+        }
+    }
+}
+
+impl From<straft::rpc::InstallSnapshotResponse> for InstallSnapshotResponse {
+    fn from(res: straft::rpc::InstallSnapshotResponse) -> InstallSnapshotResponse {
+        InstallSnapshotResponse {
+            term: Some(res.term),
+        }
+    }
+}
+
 impl Into<straft::rpc::WriteRequest> for WriteRequest {
     fn into(self) -> straft::rpc::WriteRequest {
         straft::rpc::WriteRequest {

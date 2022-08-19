@@ -1,8 +1,6 @@
 use anyhow::Result;
 use std::{
     collections::{HashMap, HashSet},
-    iter,
-    ops::RangeFrom,
     sync::mpsc::SyncSender,
 };
 
@@ -15,6 +13,19 @@ pub enum Role {
     LEADER,
     NONVOTER,
     SHUTDOWN,
+}
+
+impl std::fmt::Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let color = match self {
+            Role::FOLLOWER => "\x1b[37m",
+            Role::CANDIDATE => "\x1b[33m",
+            Role::LEADER => "\x1b[36m",
+            Role::NONVOTER => "\x1b[30m",
+            Role::SHUTDOWN => "\x1b[31m",
+        };
+        write!(f, "{color}{:?}\x1b[0m", self)
+    }
 }
 
 pub struct NodeState {
@@ -42,6 +53,9 @@ pub struct NodeState {
     new_members: HashSet<NodeId>,
     non_voting_members: HashSet<NodeId>,
     joint_consensus: bool,
+    // snapshot
+    last_included_index: usize,
+    last_included_term: u64,
 }
 
 impl NodeState {
@@ -55,11 +69,7 @@ impl NodeState {
             role,
             current_term: 0,
             voted_for: None,
-            log: vec![Entry {
-                index: 0,
-                term: 0,
-                command: Command::Empty,
-            }],
+            log: Vec::new(),
             commit_index: 0,
             last_applied: 0,
             candidate_term: 0,
@@ -67,24 +77,30 @@ impl NodeState {
             next_index: HashMap::new(),
             match_index: HashMap::new(),
             leader_id: None,
-            write_responser: vec![None],
+            write_responser: Vec::new(),
             id,
             members,
             new_members: HashSet::new(),
             non_voting_members: HashSet::new(),
             joint_consensus: false,
+            last_included_index: 0,
+            last_included_term: 0,
         }
     }
 
     pub fn initialize_candidate_state(&mut self, id: NodeId) {
         self.candidate_term = self.current_term;
-        self.votes = HashSet::from_iter(iter::once(id));
+        self.votes = HashSet::from_iter(std::iter::once(id));
     }
 
     pub fn initialize_leader_state(&mut self, id: NodeId) {
         self.leader_id = Some(id);
         self.next_index = HashMap::new();
         self.match_index = HashMap::new();
+    }
+
+    pub fn role(&self) -> Role {
+        self.role
     }
 
     pub fn is_role(&self, _role: Role) -> bool {
@@ -96,15 +112,31 @@ impl NodeState {
     }
 
     pub fn log(&self, ind: usize) -> &Entry {
-        &self.log[ind]
+        &self.log[ind - self.last_included_index - 1]
     }
 
-    pub fn log_range_from(&self, range: RangeFrom<usize>) -> &[Entry] {
-        &self.log[range]
+    pub fn log_range_from(&self, start: usize) -> &[Entry] {
+        let start = start - self.last_included_index - 1;
+        self.log.get(start..).unwrap_or_default()
     }
 
-    pub fn last_log(&self) -> &Entry {
-        self.log.last().unwrap()
+    pub fn log_info(&self, ind: usize) -> (usize, u64) {
+        if ind == self.last_included_index {
+            (self.last_included_index, self.last_included_term)
+        } else {
+            let ind = ind - self.last_included_index - 1;
+            let entry = &self.log[ind];
+            (entry.index, entry.term)
+        }
+    }
+
+    pub fn last_log_info(&self) -> (usize, u64) {
+        if self.log.is_empty() {
+            (self.last_included_index, self.last_included_term)
+        } else {
+            let entry = &self.log.last().unwrap();
+            (entry.index, entry.term)
+        }
     }
 
     pub fn push_log(&mut self, entry: Entry, sender: Option<SyncSender<Result<String>>>) {
@@ -114,6 +146,7 @@ impl NodeState {
     }
 
     pub fn splice_log(&mut self, from: usize, entries: Vec<Entry>) {
+        let from = from - self.last_included_index - 1;
         for entry in entries.iter() {
             self.change_membership(&entry.command);
         }
@@ -123,6 +156,7 @@ impl NodeState {
     }
 
     pub fn write_responser(&self, ind: usize) -> &Option<SyncSender<Result<String>>> {
+        let ind = ind - self.last_included_index - 1;
         &self.write_responser[ind]
     }
 
@@ -188,7 +222,7 @@ impl NodeState {
                 .iter()
                 .map(|id| {
                     if id == &self.id {
-                        self.last_log().index
+                        self.last_log_info().0
                     } else {
                         *self.match_index.get(id).unwrap_or(&0)
                     }
@@ -202,5 +236,27 @@ impl NodeState {
             res = std::cmp::min(res, _majority_match_index(&self.new_members));
         }
         res
+    }
+
+    pub fn in_snapshot(&self, ind: usize) -> bool {
+        ind <= self.last_included_index
+    }
+
+    pub fn should_save_snapshot(&self, threshold: usize) -> bool {
+        self.last_applied > self.last_included_index + threshold
+    }
+
+    pub fn save_snapshot(&mut self, last_included_index: usize, last_included_term: u64) {
+        let new_last_included_index = last_included_index - self.last_included_index - 1;
+        self.log.drain(..=new_last_included_index);
+        self.last_included_index = last_included_index;
+        self.last_included_term = last_included_term;
+    }
+
+    pub fn install_snapshot(&mut self, last_included_index: usize, last_included_term: u64) {
+        self.commit_index = last_included_index;
+        self.last_applied = last_included_index;
+        self.last_included_index = last_included_index;
+        self.last_included_term = last_included_term;
     }
 }

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use tokio::runtime::Builder;
 
-use crate::grpc::{raft_client::RaftClient, AppendEntriesRequest, RequestVoteRequest};
+use crate::grpc::{raft_client::RaftClient, AppendEntriesRequest, RequestVoteRequest, InstallSnapshotRequest};
 
 #[derive(Clone)]
 pub struct MyClient {
@@ -31,6 +31,7 @@ impl straft::ExternalNodeClient for MyClient {
         let response = rt.block_on(client.append_entries(AppendEntriesRequest::from(request)))?;
         Ok(response.into_inner().into())
     }
+
     fn request_vote(
         &mut self,
         id: String,
@@ -40,6 +41,18 @@ impl straft::ExternalNodeClient for MyClient {
         let rt = Builder::new_multi_thread().enable_all().build()?;
         let mut client = rt.block_on(RaftClient::connect(addr))?;
         let response = rt.block_on(client.request_vote(RequestVoteRequest::from(request)))?;
+        Ok(response.into_inner().into())
+    }
+
+    fn install_snapshot(
+        &mut self,
+        id: straft::NodeId,
+        request: straft::rpc::InstallSnapshotRequest,
+    ) -> Result<straft::rpc::InstallSnapshotResponse> {
+        let addr = self.addr[&id].clone();
+        let rt = Builder::new_multi_thread().enable_all().build()?;
+        let mut client = rt.block_on(RaftClient::connect(addr))?;
+        let response = rt.block_on(client.install_snapshot(InstallSnapshotRequest::from(request)))?;
         Ok(response.into_inner().into())
     }
 }

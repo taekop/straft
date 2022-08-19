@@ -6,8 +6,8 @@ use tonic::{transport::Server, Request, Response, Status};
 use crate::grpc::{
     raft_server::{Raft, RaftServer},
     AppendEntriesRequest, AppendEntriesResponse, ChangeMembershipRequest, ChangeMembershipResponse,
-    ReadRequest, ReadResponse, RequestVoteRequest, RequestVoteResponse, WriteRequest,
-    WriteResponse,
+    InstallSnapshotRequest, InstallSnapshotResponse, ReadRequest, ReadResponse, RequestVoteRequest,
+    RequestVoteResponse, WriteRequest, WriteResponse,
 };
 use straft::InternalNodeClient;
 
@@ -65,7 +65,24 @@ impl Raft for App {
         let request = straft::RequestMessage::ChangeMembership(request.into_inner().into());
         let response = client.send(request);
         match response {
-            straft::ResponseMessage::ChangeMembership(response) => Ok(Response::new(response.into())),
+            straft::ResponseMessage::ChangeMembership(response) => {
+                Ok(Response::new(response.into()))
+            }
+            _ => Err(Status::internal("Invalid response type")),
+        }
+    }
+
+    async fn install_snapshot(
+        &self,
+        request: Request<InstallSnapshotRequest>,
+    ) -> Result<Response<InstallSnapshotResponse>, Status> {
+        let client = self.client.clone();
+        let request = straft::RequestMessage::InstallSnapshot(request.into_inner().into());
+        let response = client.send(request);
+        match response {
+            straft::ResponseMessage::InstallSnapshot(response) => {
+                Ok(Response::new(response.into()))
+            }
             _ => Err(Status::internal("Invalid response type")),
         }
     }

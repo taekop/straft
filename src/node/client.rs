@@ -3,7 +3,10 @@ use std::sync::mpsc;
 
 use crate::{
     node::actor::{Request, RequestMessage, ResponseMessage},
-    rpc::{AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse},
+    rpc::{
+        AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
+        InstallSnapshotResponse, RequestVoteRequest, RequestVoteResponse,
+    },
     NodeId,
 };
 
@@ -39,4 +42,9 @@ pub trait ExternalNodeClient: 'static + Clone + Send + Sync {
         id: NodeId,
         request: RequestVoteRequest,
     ) -> Result<RequestVoteResponse>;
+    fn install_snapshot(
+        &mut self,
+        id: NodeId,
+        request: InstallSnapshotRequest,
+    ) -> Result<InstallSnapshotResponse>;
 }

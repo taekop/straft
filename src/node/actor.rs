@@ -12,8 +12,8 @@ use crate::{
     },
     rpc::{
         AppendEntriesRequest, AppendEntriesResponse, ChangeMembershipRequest,
-        ChangeMembershipResponse, ReadRequest, ReadResponse, RequestVoteRequest,
-        RequestVoteResponse, WriteRequest, WriteResponse,
+        ChangeMembershipResponse, InstallSnapshotRequest, InstallSnapshotResponse, ReadRequest,
+        ReadResponse, RequestVoteRequest, RequestVoteResponse, WriteRequest, WriteResponse,
     },
     state_machine::StateMachineClient,
     ClusterConfig, NodeId,
@@ -27,10 +27,14 @@ pub struct Request {
 
 #[derive(Debug)]
 pub enum RequestMessage {
-    // rpc, called by external
+    // called by other node
     AppendEntries(AppendEntriesRequest),
     RequestVote(RequestVoteRequest),
+    // called by client
     ChangeMembership(ChangeMembershipRequest),
+    // called by other node
+    InstallSnapshot(InstallSnapshotRequest),
+    // called by client
     Write(WriteRequest),
     Read(ReadRequest),
     // called by self
@@ -44,12 +48,13 @@ pub enum ResponseMessage {
     AppendEntries(AppendEntriesResponse),
     RequestVote(RequestVoteResponse),
     ChangeMembership(ChangeMembershipResponse),
+    InstallSnapshot(InstallSnapshotResponse),
     Write(WriteResponse),
     Read(ReadResponse),
     Heartbeat,
     AppendEntriesResult,
     RequestVoteResult,
-    // recursive
+    // async request, wait for state machine
     WriteResult(mpsc::Receiver<ResponseMessage>),
     ReadResult(mpsc::Receiver<ResponseMessage>),
 }
@@ -146,6 +151,9 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
             RequestMessage::ChangeMembership(msg) => {
                 ResponseMessage::ChangeMembership(self.handle_change_membership(msg))
             }
+            RequestMessage::InstallSnapshot(msg) => {
+                ResponseMessage::InstallSnapshot(self.handle_install_snapshot(msg))
+            }
             RequestMessage::Write(msg) => ResponseMessage::WriteResult(self.handle_write(msg)),
             RequestMessage::Read(msg) => ResponseMessage::ReadResult(self.handle_read(msg)),
             RequestMessage::Heartbeat => self.handle_heartbeat(),
@@ -158,6 +166,7 @@ impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
         };
         if let Some(sender) = req.sender {
             match res {
+                // R/W requests need to wait for state machine
                 ResponseMessage::WriteResult(rx) | ResponseMessage::ReadResult(rx) => {
                     std::thread::spawn(move || {
                         if let Ok(msg) = rx.recv() {

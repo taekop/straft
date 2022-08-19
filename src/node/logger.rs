@@ -8,26 +8,32 @@ pub type Logger = slog::Logger;
 
 impl<SM: StateMachineClient, Client: ExternalNodeClient> Node<SM, Client> {
     pub fn log_trace(&self, msg: String) {
-        trace!(self.logger, "{}", msg);
+        let role = self.state.role();
+        trace!(self.logger, "[{}] {}", role, msg);
     }
 
     pub fn log_debug(&self, msg: String) {
-        debug!(self.logger, "{}", msg);
+        let role = self.state.role();
+        debug!(self.logger, "[{}] {}", role, msg);
     }
 
     pub fn log_info(&self, msg: String) {
-        info!(self.logger, "{}", msg);
+        let role = self.state.role();
+        info!(self.logger, "[{}] {}", role, msg);
     }
 
     pub fn log_warning(&self, msg: String) {
-        warn!(self.logger, "{}", msg);
+        let role = self.state.role();
+        warn!(self.logger, "[{}] {}", role, msg);
     }
 
     pub fn log_error(&self, msg: String) {
-        error!(self.logger, "{}", msg);
+        let role = self.state.role();
+        error!(self.logger, "[{}] {}", role, msg);
     }
 
     pub fn log_critical(&self, msg: String) {
-        crit!(self.logger, "{}", msg);
+        let role = self.state.role();
+        crit!(self.logger, "[{}] {}", role, msg);
     }
 }

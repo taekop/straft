@@ -1,3 +1,4 @@
+extern crate serde_json;
 #[macro_use]
 extern crate slog;
 extern crate slog_term;
@@ -52,15 +53,17 @@ fn get_config(num: usize) -> (String, String, HashSet<String>, ClusterConfig, My
     let addr = addrs[num].clone();
     let members = HashSet::from_iter(ids[0..=2].iter().cloned());
     let config = ClusterConfig {
+        heartbeat_period: 200,
         minimum_election_timeout: 1000,
         maximum_election_timeout: 2000,
-        heartbeat_period: 200,
+        snapshot_threshold: 2,
+        snapshot_chunk_size: 10,
     };
     (id, addr, members, config, external_client)
 }
 
 fn get_state_machine(id: &str) -> MyStateMachineClient {
-    let state_machine = MyStateMachine::new(format!("log/log-{}.txt", id));
+    let state_machine = MyStateMachine::new(id.to_string(), format!("snapshot"), format!("log/log-{}.txt", id));
     MyStateMachineClient {
         tx: state_machine.run(),
     }
