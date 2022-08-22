@@ -1,3 +1,9 @@
+# Prerequisite
+
+```shell
+brew install protobuf
+```
+
 # Guide
 
 Integration: gRPC and HashMap state machine.
